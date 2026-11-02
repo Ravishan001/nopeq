@@ -27,7 +27,7 @@ export const SALON_SERVICES: TemplateService[] = [
 
 export const RESERVED_SLUGS = new Set([
   "login", "signup", "dashboard", "onboarding", "auth", "api", "b", "admin", "settings",
-  "icons", "manifest", "about", "pricing", "help", "terms", "privacy", "nopeq", "ravion",
+  "icons", "manifest", "forgot", "reset", "about", "pricing", "help", "terms", "privacy", "nopeq", "ravion",
 ]);
 
 export function slugify(s: string) {

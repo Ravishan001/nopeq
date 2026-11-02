@@ -29,7 +29,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       else router.push("/onboarding");
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setErr(error.message);
+      if (error) setErr(/confirm/i.test(error.message) ? t("not_confirmed") : /invalid/i.test(error.message) ? t("bad_login") : error.message);
       else { router.push(params.get("next") || "/dashboard"); router.refresh(); }
     }
     setBusy(false);
@@ -46,9 +46,11 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <label className="label" htmlFor="pw">{t("password")}</label>
         <input id="pw" className="input" type="password" required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
       </div>
+      {mode === "login" && params.get("confirmed") && !err && <p className="text-sm text-green-600 dark:text-green-400">{t("confirmed_login")}</p>}
       {err && <p className="text-sm text-red-500">{err}</p>}
       {msg && <p className="text-sm text-green-600 dark:text-green-400">{msg}</p>}
       <button className="btn w-full" disabled={busy}>{mode === "login" ? t("login") : t("signup")}</button>
+      {mode === "login" && <p className="text-sm text-center"><Link href="/forgot" className="text-muted hover:text-brand">{t("forgot_pw")}</Link></p>}
       <p className="text-sm text-muted text-center">
         {mode === "login" ? t("no_account") : t("have_account")}{" "}
         <Link className="text-brand font-semibold" href={mode === "login" ? "/signup" : "/login"}>
