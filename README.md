@@ -19,6 +19,7 @@ Salons වලට online booking platform එක. **powered by Ravion Studio**
 
 ### 1. Supabase project එක
 1. supabase.com → **New project** → නම `nopeq`, region **Singapore** (ලංකාවට ළඟම), strong DB password එකක් දාන්න
+   - Create කරන කොට Security එකේ: **Enable Data API ✅**, **Automatically expose new tables ⬜ (untick)**, **Enable automatic RLS ✅**
 2. Project එක හැදුනම **SQL Editor → New query** → `supabase/schema.sql` file එකේ තියෙන ඔක්කොම copy කරලා paste කරන්න → **Run**
    - "Success. No rows returned" ආවොත් හරි ✅
 3. **Authentication → URL Configuration**

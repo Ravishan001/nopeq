@@ -253,6 +253,20 @@ grant execute on function public.busy_ranges(uuid,timestamptz,timestamptz) to an
 grant execute on function public.get_booking(text) to anon, authenticated;
 grant execute on function public.cancel_booking(text) to anon, authenticated;
 
+
+-- ---------- table privileges ----------
+-- (works with "Automatically expose new tables" turned OFF: we grant exactly what the app needs)
+grant usage on schema public to anon, authenticated;
+-- visitors (no login): read only the public columns of a business + its menu
+grant select (id, slug, name, type, sections, logo_url, cover_url, phone, whatsapp, address, maps_url,
+              facebook, instagram, tiktok, is_published) on public.businesses to anon;
+grant select on public.branches, public.services, public.staff, public.business_hours to anon;
+-- owners (logged in): RLS above limits every row to their own business
+grant select, insert, update, delete on public.businesses, public.branches, public.services,
+  public.staff, public.business_hours to authenticated;
+grant select, update on public.bookings to authenticated;
+grant execute on function public.is_owner(uuid), public.is_public(uuid) to anon, authenticated;
+
 -- ---------- storage for logos / cover photos ----------
 insert into storage.buckets (id, name, public) values ('media', 'media', true)
 on conflict (id) do nothing;
