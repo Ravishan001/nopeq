@@ -1,5 +1,6 @@
 import { setBookingStatus } from "@/app/dashboard/actions";
 import { fmtDateTime } from "@/lib/time";
+import { formatMoney } from "@/lib/countries";
 import type { Lang, TKey } from "@/lib/i18n";
 
 export type BookingRowData = {
@@ -7,19 +8,19 @@ export type BookingRowData = {
   services: { name: string; price: number } | null; staff: { name: string } | null; branches: { name: string } | null;
 };
 
-export function BookingRow({ b, lang, t }: { b: BookingRowData; lang: Lang; t: (k: TKey) => string }) {
-  const wa = b.customer_phone.replace(/\D/g, "").replace(/^0/, "94");
+export function BookingRow({ b, lang, t, tz, currency }: { b: BookingRowData; lang: Lang; t: (k: TKey) => string; tz: string; currency: string }) {
+  const wa = b.customer_phone.replace(/\D/g, "");
   const statusColor: Record<string, string> = {
     confirmed: "text-brand", completed: "text-green-600 dark:text-green-400", cancelled: "text-muted line-through", no_show: "text-red-500",
   };
   const upcoming = b.status === "confirmed";
   return (
     <div className="card p-4 flex flex-wrap gap-x-4 gap-y-2 items-center">
-      <div className="font-display font-bold w-40 shrink-0">{fmtDateTime(b.starts_at, lang)}</div>
+      <div className="font-display font-bold w-40 shrink-0">{fmtDateTime(b.starts_at, lang, tz)}</div>
       <div className="flex-1 min-w-48">
         <div className="font-semibold">{b.customer_name} · {b.services?.name ?? "—"}</div>
         <div className="text-sm text-muted">
-          {[b.staff?.name, b.branches?.name, b.services ? `Rs. ${b.services.price.toLocaleString()}` : null].filter(Boolean).join(" · ")}
+          {[b.staff?.name, b.branches?.name, b.services ? formatMoney(Number(b.services.price), currency) : null].filter(Boolean).join(" · ")}
           {" · "}<a className="hover:text-brand" href={`https://wa.me/${wa}`} target="_blank">{b.customer_phone}</a>
         </div>
         {b.note && <div className="text-sm mt-1">📝 {b.note}</div>}

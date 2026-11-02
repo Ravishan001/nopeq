@@ -7,13 +7,14 @@ import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
 import { RESERVED_SLUGS } from "@/lib/templates";
 import { BookingFlow } from "./BookingFlow";
+import { getCountry } from "@/lib/countries";
 import Link from "next/link";
 
 async function load(slug: string) {
   if (RESERVED_SLUGS.has(slug) || !/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) return null;
   const supabase = await createClient();
   const { data: b } = await supabase.from("businesses")
-    .select("id, slug, name, sections, logo_url, cover_url, phone, whatsapp, address, maps_url, facebook, instagram, tiktok")
+    .select("id, slug, name, sections, country, currency, timezone, logo_url, cover_url, phone, whatsapp, address, maps_url, facebook, instagram, tiktok")
     .eq("slug", slug).eq("is_published", true).maybeSingle();
   if (!b) return null;
   const [services, staff, branches] = await Promise.all([
@@ -40,7 +41,8 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
   if (!d) notFound();
   const { t } = await getT();
   const { b } = d;
-  const wa = (b.whatsapp || b.phone || "").replace(/\D/g, "").replace(/^0/, "94");
+  const dial = getCountry(b.country).dial;
+  const wa = (b.whatsapp || b.phone || "").replace(/\D/g, "").replace(/^0/, dial);
   const links = [
     b.maps_url && ["📍 Map", b.maps_url],
     wa && ["💬 WhatsApp", `https://wa.me/${wa}`],
@@ -76,7 +78,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
         )}
         <h2 className="font-display font-bold text-3xl tracking-tight mt-10 mb-6">{t("book_title")}</h2>
         {d.services.length ? (
-          <BookingFlow businessId={b.id} sections={b.sections} services={d.services} staff={d.staff} branches={d.branches} />
+          <BookingFlow businessId={b.id} sections={b.sections} services={d.services} staff={d.staff} branches={d.branches} currency={b.currency} timezone={b.timezone} dial={dial} />
         ) : (
           <p className="text-muted">—</p>
         )}

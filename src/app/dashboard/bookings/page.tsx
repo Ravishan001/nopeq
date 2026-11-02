@@ -23,7 +23,7 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
         ))}
       </div>
       <div className="space-y-2">
-        {rows.length ? rows.map((b) => <BookingRow key={b.id} b={b} lang={lang} t={t} />) : <div className="card p-8 text-center text-muted">{t("no_bookings")}</div>}
+        {rows.length ? rows.map((b) => <BookingRow key={b.id} b={b} lang={lang} t={t} tz={business.timezone} currency={business.currency} />) : <div className="card p-8 text-center text-muted">{t("no_bookings")}</div>}
       </div>
     </div>
   );

@@ -50,7 +50,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <h2 className="font-display font-bold text-xl mb-3">{t("upcoming")}</h2>
           <div className="space-y-2">
             {(upcoming.data as unknown as BookingRowData[] | null)?.length ? (
-              (upcoming.data as unknown as BookingRowData[]).map((b) => <BookingRow key={b.id} b={b} lang={lang} t={t} />)
+              (upcoming.data as unknown as BookingRowData[]).map((b) => <BookingRow key={b.id} b={b} lang={lang} t={t} tz={business.timezone} currency={business.currency} />)
             ) : (
               <div className="card p-8 text-center text-muted">{t("no_bookings")}</div>
             )}

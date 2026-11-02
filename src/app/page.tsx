@@ -3,6 +3,8 @@ import { Header } from "@/components/Header";
 import { Mark, Wordmark } from "@/components/Logo";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
+import { detectGeo } from "@/lib/geo";
+import { formatMoney, localPrice, planPrices, type Country } from "@/lib/countries";
 import { getUserFast } from "@/lib/business";
 
 const COPY = {
@@ -24,9 +26,9 @@ const COPY = {
     ],
     price_title: "සරල ගණන්",
     plans: [
-      ["Free", "Rs. 0", "Booking page · මාසෙට bookings 50 · NopeQ icon", false],
-      ["Pro", "Rs. 2,500", "Unlimited bookings · reminders · තමන්ගේ logo app icon", true],
-      ["AI", "Rs. 5,500", "Pro + AI agent (web + WhatsApp) 24/7", false],
+      ["Free", "Booking page · මාසෙට bookings 50 · NopeQ icon", false],
+      ["Pro", "Unlimited bookings · reminders · තමන්ගේ logo app icon", true],
+      ["AI", "Pro + AI agent (web + WhatsApp) 24/7", false],
     ],
     month: "/මාසෙට",
     cta_title: "අද ඉඳන් පෝලිම් එපා.",
@@ -51,9 +53,9 @@ const COPY = {
     ],
     price_title: "Simple pricing",
     plans: [
-      ["Free", "Rs. 0", "Booking page · 50 bookings/month · NopeQ icon", false],
-      ["Pro", "Rs. 2,500", "Unlimited bookings · reminders · your logo as app icon", true],
-      ["AI", "Rs. 5,500", "Pro + AI agent (web + WhatsApp) 24/7", false],
+      ["Free", "Booking page · 50 bookings/month · NopeQ icon", false],
+      ["Pro", "Unlimited bookings · reminders · your logo as app icon", true],
+      ["AI", "Pro + AI agent (web + WhatsApp) 24/7", false],
     ],
     month: "/month",
     cta_title: "No more queues, starting today.",
@@ -62,7 +64,9 @@ const COPY = {
   },
 } as const;
 
-function PhonePreview({ title }: { title: string }) {
+function PhonePreview({ title, country }: { title: string; country: Country }) {
+  const m = (lkr: number) => formatMoney(localPrice(lkr, country), country.currency);
+  const lk = country.code === "LK";
   const slots = ["10:00 AM", "11:30 AM", "2:00 PM", "3:30 PM", "5:00 PM", "6:30 PM"];
   return (
     <div className="relative mx-auto w-[300px] sm:w-[330px]">
@@ -76,15 +80,15 @@ function PhonePreview({ title }: { title: string }) {
                 <Mark size={30} color="#fff" />
               </div>
               <div>
-                <div className="font-display font-bold">Look Hair Studio</div>
-                <div className="text-xs text-muted">Kuliyapitiya · Negombo</div>
+                <div className="font-display font-bold">{lk ? "Look Hair Studio" : "Glow Hair Studio"}</div>
+                <div className="text-xs text-muted">{lk ? "Kuliyapitiya · Negombo" : "Downtown · Riverside"}</div>
               </div>
             </div>
             <div className="font-display font-bold text-lg mt-5">{title}</div>
             <div className="mt-3 space-y-2">
-              {[["Haircut", "1,000", true], ["Haircut + blow-dry", "2,500", false]].map(([n, p, on]) => (
+              {([["Haircut", 1000, true], ["Haircut + blow-dry", 2500, false]] as const).map(([n, p, on]) => (
                 <div key={n as string} className={`rounded-xl border px-3 py-2.5 flex justify-between text-sm font-semibold ${on ? "border-brand bg-soft" : "border-line bg-card"}`}>
-                  <span>{n}</span><span>Rs. {p}</span>
+                  <span>{n}</span><span>{m(p)}</span>
                 </div>
               ))}
             </div>
@@ -93,7 +97,7 @@ function PhonePreview({ title }: { title: string }) {
                 <div key={s} className={`rounded-lg py-2 text-center text-[11px] font-bold border ${i === 2 ? "bg-brand text-white border-brand" : "border-line bg-card"}`}>{s}</div>
               ))}
             </div>
-            <div className="mt-4 h-11 rounded-xl bg-brand text-white font-bold text-sm flex items-center justify-center">Confirm · Rs. 1,000</div>
+            <div className="mt-4 h-11 rounded-xl bg-brand text-white font-bold text-sm flex items-center justify-center">Confirm · {m(1000)}</div>
           </div>
         </div>
       </div>
@@ -104,6 +108,8 @@ function PhonePreview({ title }: { title: string }) {
 export default async function Home() {
   const { t, lang } = await getT();
   const c = COPY[lang];
+  const { country } = await detectGeo();
+  const plan = planPrices(country.currency);
   const supabase = await createClient();
   const user = await getUserFast(supabase);
   const start = user ? "/dashboard" : "/signup";
@@ -131,7 +137,7 @@ export default async function Home() {
               {!user && <Link href="/login" className="btn-ghost h-14 px-7 text-lg">{t("login")}</Link>}
             </div>
           </div>
-          <PhonePreview title={c.preview_title} />
+          <PhonePreview title={c.preview_title} country={country} />
         </div>
       </section>
 
@@ -170,11 +176,11 @@ export default async function Home() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-20">
           <h2 className="font-display font-bold text-3xl md:text-4xl tracking-tight text-center">{c.price_title}</h2>
           <div className="grid md:grid-cols-3 gap-6 mt-12 max-w-5xl mx-auto">
-            {c.plans.map(([n, p, d, hot]) => (
+            {c.plans.map(([n, d, hot], i) => (
               <div key={n} className={`card p-7 relative ${hot ? "border-brand ring-2 ring-brand/30" : ""}`}>
                 {hot && <span className="absolute -top-3 left-7 chip chip-on text-xs py-1">Popular</span>}
                 <div className={`font-display font-bold text-xl ${n === "AI" ? "text-violet-500" : hot ? "text-brand" : ""}`}>{n}</div>
-                <div className="font-display font-bold text-4xl mt-3">{p}<span className="text-base text-muted font-sans font-medium"> {c.month}</span></div>
+                <div className="font-display font-bold text-4xl mt-3">{formatMoney(plan.prices[i], plan.currency)}<span className="text-base text-muted font-sans font-medium"> {c.month}</span></div>
                 <p className="text-muted mt-4 leading-relaxed">{d}</p>
                 <Link href={start} className={`${hot ? "btn" : "btn-ghost h-12"} w-full mt-6`}>{t("start_free")}</Link>
               </div>

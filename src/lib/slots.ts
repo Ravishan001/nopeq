@@ -1,4 +1,4 @@
-import { TZ_OFFSET } from "./time";
+import { zonedToUtc } from "./time";
 
 export type Busy = { staff_id: string | null; starts_at: string; ends_at: string };
 
@@ -8,14 +8,14 @@ const label = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 
 /** Free start times ("HH:MM", Sri Lanka time) for one day. */
 export function freeSlots(opts: {
-  date: string; open: string; close: string; duration: number;
+  date: string; tz: string; open: string; close: string; duration: number;
   staffIds: string[]; staffId: string | null; busy: Busy[]; step?: number; now?: Date;
 }) {
-  const { date, open, close, duration, staffIds, staffId, busy, step = 30, now = new Date() } = opts;
+  const { date, tz, open, close, duration, staffIds, staffId, busy, step = 30, now = new Date() } = opts;
   const out: string[] = [];
   const earliest = now.getTime() + 30 * 60_000; // at least 30 min from now
   for (let m = toMin(open); m + duration <= toMin(close); m += step) {
-    const start = new Date(`${date}T${label(m)}:00${TZ_OFFSET}`).getTime();
+    const start = zonedToUtc(date, label(m), tz).getTime();
     if (start < earliest) continue;
     const end = start + duration * 60_000;
     const clash = (b: Busy) => new Date(b.starts_at).getTime() < end && new Date(b.ends_at).getTime() > start;

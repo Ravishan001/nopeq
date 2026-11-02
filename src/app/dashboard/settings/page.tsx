@@ -4,6 +4,7 @@ import { getT } from "@/lib/lang";
 import { WEEKDAYS, type TKey } from "@/lib/i18n";
 import { addBranch, addStaff, deleteService, removeBranch, removeStaff, saveHours, upsertService } from "../actions";
 import { MediaUpload } from "./MediaUpload";
+import { currencySymbol } from "@/lib/countries";
 import { ProfileForm } from "./ProfileForm";
 
 export const metadata = { title: "Settings" };
@@ -49,7 +50,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <select name="section" className="input h-10" defaultValue={s?.section ?? business.sections[0] ?? ""}>
             {business.sections.map((x) => <option key={x}>{x}</option>)}
           </select></div>
-        <div><label className="label">{t("price")}</label><input name="price" type="number" min={0} className="input h-10" defaultValue={s?.price ?? 0} /></div>
+        <div><label className="label">{t("price")} ({currencySymbol(business.currency)})</label><input name="price" type="number" min={0} step="any" className="input h-10" defaultValue={s?.price ?? 0} /></div>
         <div><label className="label">{t("duration")}</label><input name="duration_min" type="number" min={5} step={5} className="input h-10" defaultValue={s?.duration_min ?? 30} /></div>
         <button className="btn h-10">{s ? t("save") : `+ ${t("add")}`}</button>
         {s && <button formAction={deleteService} className="btn-ghost h-10 text-red-500">{t("delete")}</button>}

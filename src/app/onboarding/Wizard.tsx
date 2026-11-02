@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLang, useT } from "@/components/I18nProvider";
 import { WEEKDAYS } from "@/lib/i18n";
+import { COUNTRIES, currencySymbol, flag, getCountry, localPrice } from "@/lib/countries";
 import { BUSINESS_TYPES, SALON_SECTIONS, SALON_SERVICES, slugify, type TemplateService } from "@/lib/templates";
 import { checkSlug, createBusiness } from "./actions";
 
@@ -17,7 +18,7 @@ function Progress({ n }: { n: number }) {
   );
 }
 
-export function Wizard() {
+export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: string; detectedTz: string }) {
   const t = useT();
   const lang = useLang();
   const [step, setStep] = useState<Step>("type");
@@ -32,7 +33,26 @@ export function Wizard() {
   const [branches, setBranches] = useState<string[]>([]);
   const [branchInput, setBranchInput] = useState("");
   const [sections, setSections] = useState<string[]>(["Gents", "Ladies"]);
-  const [services, setServices] = useState<TemplateService[]>(SALON_SERVICES);
+  const [countryCode, setCountryCode] = useState(detectedCountry);
+  const country = getCountry(countryCode);
+  const [timezone, setTimezone] = useState(detectedTz);
+  const priced = (code: string) => SALON_SERVICES.map((s) => ({ ...s, price: localPrice(s.price, getCountry(code)) }));
+  const [services, setServices] = useState<TemplateService[]>(() => priced(detectedCountry));
+  const zones = useMemo(() => {
+    try { return Intl.supportedValuesOf("timeZone"); } catch { return [country.tz]; }
+  }, [country.tz]);
+  const sym = currencySymbol(country.currency);
+
+  function changeCountry(code: string) {
+    setCountryCode(code);
+    const c = getCountry(code);
+    setTimezone(code === detectedCountry ? detectedTz : c.tz);
+    // re-price only the template services the owner hasn't renamed
+    setServices((prev) => prev.map((s) => {
+      const tpl = SALON_SERVICES.find((x) => x.name === s.name && x.section === s.section);
+      return tpl ? { ...s, price: localPrice(tpl.price, c) } : s;
+    }));
+  }
   const [staff, setStaff] = useState<string[]>([]);
   const [staffInput, setStaffInput] = useState("");
   const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
@@ -74,8 +94,8 @@ export function Wizard() {
     const chosen = visibleServices.filter((s) => s.on && s.name.trim());
     start(async () => {
       const res = await createBusiness({
-        type: "salon", name, slug, sections, branches,
-        services: chosen.map((s) => ({ section: s.section, name: s.name.trim(), price: Math.round(s.price) || 0, duration: Math.round(s.duration) || 30 })),
+        type: "salon", country: countryCode, timezone, name, slug, sections, branches,
+        services: chosen.map((s) => ({ section: s.section, name: s.name.trim(), price: Math.max(0, Number(s.price) || 0), duration: Math.round(s.duration) || 30 })),
         staff, days, open, close,
       });
       if (res?.error === "exists") window.location.href = "/dashboard";
@@ -156,6 +176,21 @@ export function Wizard() {
                 <span className="ml-2">{slugOk === true ? "✅" : slugOk === false ? "❌" : ""}</span>
               </div>
             </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="country">{t("country")}</label>
+                <select id="country" className="input" value={countryCode} onChange={(e) => changeCountry(e.target.value)}>
+                  {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{flag(c.code)} {c.name} · {c.currency}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="tz">{t("timezone")}</label>
+                <select id="tz" className="input" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+                  {(zones.includes(timezone) ? zones : [timezone, ...zones]).map((z) => <option key={z} value={z}>{z.replace(/_/g, " ")}</option>)}
+                </select>
+              </div>
+              <p className="text-xs text-muted sm:col-span-2 -mt-1">📍 {t("country_hint")}</p>
+            </div>
             <div>
               <span className="label">{t("branches")}</span>
               <div className="flex flex-wrap gap-2">
@@ -165,7 +200,7 @@ export function Wizard() {
               </div>
               <div className="flex gap-2 mt-2">
                 <input className="input" value={branchInput} onChange={(e) => setBranchInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addBranch(); } }} placeholder="Kuliyapitiya" />
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addBranch(); } }} placeholder={countryCode === "LK" ? "Kuliyapitiya" : "Downtown"} />
                 <button type="button" className="btn-ghost h-12" onClick={addBranch}>+ {t("add")}</button>
               </div>
             </div>
@@ -200,8 +235,8 @@ export function Wizard() {
                       <input type="checkbox" checked={s.on} onChange={(e) => updateService(s.i, { on: e.target.checked })} className="size-5 accent-[#F0521F]" aria-label={s.name} />
                       <input className="flex-1 bg-transparent font-semibold outline-none min-w-0" value={s.name} onChange={(e) => updateService(s.i, { name: e.target.value })} />
                       <div className="flex items-center gap-1 text-sm">
-                        <span className="text-muted">Rs.</span>
-                        <input type="number" min={0} className="w-20 h-9 px-2 rounded-lg bg-card border border-line text-right font-semibold" value={s.price}
+                        <span className="text-muted">{sym}</span>
+                        <input type="number" min={0} step="any" className="w-24 h-9 px-2 rounded-lg bg-card border border-line text-right font-semibold" value={s.price}
                           onChange={(e) => updateService(s.i, { price: Number(e.target.value) })} />
                       </div>
                       <div className="hidden sm:flex items-center gap-1 text-sm">

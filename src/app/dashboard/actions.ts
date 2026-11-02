@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireBusiness } from "@/lib/business";
 import { createClient } from "@/lib/supabase/server";
+import { COUNTRIES, getCountry } from "@/lib/countries";
+import { isValidTz } from "@/lib/time";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -20,6 +22,8 @@ export async function setBookingStatus(id: string, status: "completed" | "no_sho
 const url = z.string().trim().max(300).url().or(z.literal(""));
 const profileSchema = z.object({
   name: z.string().trim().min(2).max(80),
+  country: z.string().refine((c) => COUNTRIES.some((x) => x.code === c)),
+  timezone: z.string().max(60).refine(isValidTz),
   phone: z.string().trim().max(20),
   whatsapp: z.string().trim().max(20),
   address: z.string().trim().max(200),
@@ -33,7 +37,8 @@ export async function saveProfile(_: unknown, form: FormData) {
   const { supabase, business } = await requireBusiness();
   const parsed = profileSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.path.join(".") };
-  const v = Object.fromEntries(Object.entries(parsed.data).map(([k, x]) => [k, x === "" ? null : x]));
+  const v: Record<string, unknown> = Object.fromEntries(Object.entries(parsed.data).map(([k, x]) => [k, x === "" ? null : x]));
+  v.currency = getCountry(parsed.data.country).currency;
   const { error } = await supabase.from("businesses").update(v).eq("id", business.id);
   revalidatePath("/dashboard", "layout");
   return { ok: !error };
@@ -50,7 +55,7 @@ export async function setMedia(field: "logo_url" | "cover_url", publicUrl: strin
 const serviceSchema = z.object({
   name: z.string().trim().min(1).max(80),
   section: z.string().trim().max(30),
-  price: z.coerce.number().int().min(0).max(10_000_000),
+  price: z.coerce.number().min(0).max(1_000_000_000).transform((n) => Math.round(n * 100) / 100),
   duration_min: z.coerce.number().int().min(5).max(600),
 });
 export async function upsertService(form: FormData) {

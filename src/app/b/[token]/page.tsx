@@ -36,7 +36,7 @@ export default async function BookingStatus({ params, searchParams }: { params: 
           {!cancelled && isNew && <p className="text-sm text-muted mt-2">{t("booked_sub")}</p>}
           <div className="card p-4 mt-6 text-left space-y-1.5">
             <div className="font-bold">{b.business_name}</div>
-            <div>🗓 {fmtDateTime(b.starts_at, lang)}</div>
+            <div>🗓 {fmtDateTime(b.starts_at, lang, b.timezone ?? "Asia/Colombo")}</div>
             {b.service_name && <div>✂️ {b.service_name}{b.staff_name ? ` · ${b.staff_name}` : ""}</div>}
             {b.branch_name && <div>📍 {b.branch_name}</div>}
             <div className="text-muted text-sm">👤 {b.customer_name}</div>

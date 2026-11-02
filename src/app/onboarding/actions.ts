@@ -4,9 +4,13 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUserFast } from "@/lib/business";
 import { RESERVED_SLUGS } from "@/lib/templates";
+import { COUNTRIES, getCountry } from "@/lib/countries";
+import { isValidTz } from "@/lib/time";
 
 const schema = z.object({
   type: z.literal("salon"),
+  country: z.string().length(2).refine((c) => COUNTRIES.some((x) => x.code === c)),
+  timezone: z.string().max(60).refine(isValidTz),
   name: z.string().trim().min(2).max(80),
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]{2,39}$/),
   sections: z.array(z.string().max(30)).max(10),
@@ -14,7 +18,7 @@ const schema = z.object({
   services: z.array(z.object({
     section: z.string().max(30),
     name: z.string().trim().min(1).max(80),
-    price: z.number().int().min(0).max(10_000_000),
+    price: z.number().min(0).max(1_000_000_000),
     duration: z.number().int().min(5).max(600),
   })).min(1).max(100),
   staff: z.array(z.string().trim().min(1).max(60)).max(50),
@@ -45,7 +49,8 @@ export async function createBusiness(input: OnboardingInput): Promise<{ error: s
 
   const { data: biz, error } = await supabase
     .from("businesses")
-    .insert({ owner_id: user.id, slug: d.slug, name: d.name, type: d.type, sections: d.sections, setup_method: "manual" })
+    .insert({ owner_id: user.id, slug: d.slug, name: d.name, type: d.type, sections: d.sections, setup_method: "manual",
+      country: d.country, currency: getCountry(d.country).currency, timezone: d.timezone })
     .select("id")
     .single();
   if (error || !biz) {
@@ -57,7 +62,7 @@ export async function createBusiness(input: OnboardingInput): Promise<{ error: s
   const id = biz.id;
   const results = await Promise.all([
     d.branches.length ? supabase.from("branches").insert(d.branches.map((name) => ({ business_id: id, name }))) : null,
-    supabase.from("services").insert(d.services.map((s, i) => ({ business_id: id, name: s.name, section: s.section, price: s.price, duration_min: s.duration, sort: i }))),
+    supabase.from("services").insert(d.services.map((s, i) => ({ business_id: id, name: s.name, section: s.section, price: Math.round(s.price * 100) / 100, duration_min: s.duration, sort: i }))),
     d.staff.length ? supabase.from("staff").insert(d.staff.map((name) => ({ business_id: id, name }))) : null,
     supabase.from("business_hours").insert(
       [0, 1, 2, 3, 4, 5, 6].map((w) => ({ business_id: id, weekday: w, is_open: d.days.includes(w), open_time: d.open, close_time: d.close }))

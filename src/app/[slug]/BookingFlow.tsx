@@ -4,28 +4,27 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLang, useT } from "@/components/I18nProvider";
 import { WEEKDAYS } from "@/lib/i18n";
 import { book, getSlots } from "./actions";
+import { formatMoney } from "@/lib/countries";
+import { todayIn, weekdayOf } from "@/lib/time";
 
 type Service = { id: string; name: string; section: string | null; price: number; duration_min: number };
 type Named = { id: string; name: string };
 
-function nextDays(n: number) {
-  const out: { date: string; dow: number; day: number }[] = [];
-  for (let i = 0; i < n; i++) {
-    const d = new Date(Date.now() + i * 86400000);
-    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo" }).format(d);
-    const lk = new Date(`${date}T12:00:00+05:30`);
-    out.push({ date, dow: lk.getUTCDay(), day: Number(date.slice(8)) });
-  }
-  return out;
+function nextDays(n: number, tz: string) {
+  return Array.from({ length: n }, (_, i) => {
+    const date = todayIn(tz, i);
+    return { date, dow: weekdayOf(date), day: Number(date.slice(8)) };
+  });
 }
 
-export function BookingFlow({ businessId, sections, services, staff, branches }: {
-  businessId: string; sections: string[]; services: Service[]; staff: Named[]; branches: Named[];
+export function BookingFlow({ businessId, sections, services, staff, branches, currency, timezone, dial }: {
+  businessId: string; currency: string; timezone: string; dial: string; sections: string[]; services: Service[]; staff: Named[]; branches: Named[];
 }) {
   const t = useT();
   const lang = useLang();
   const router = useRouter();
-  const days = useMemo(() => nextDays(14), []);
+  const days = useMemo(() => nextDays(14, timezone), [timezone]);
+  const money = (n: number) => formatMoney(Number(n), currency, lang === "si" ? "si-LK" : "en");
   const sectionList = sections.filter((s) => services.some((x) => x.section === s));
 
   const [branch, setBranch] = useState<string | null>(branches[0]?.id ?? null);
@@ -102,7 +101,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches }:
                 <span className="font-semibold block">{s.name}</span>
                 <span className="text-sm text-muted">{s.duration_min} {t("min")}</span>
               </span>
-              <span className="font-bold whitespace-nowrap">Rs. {s.price.toLocaleString()}</span>
+              <span className="font-bold whitespace-nowrap">{money(s.price)}</span>
             </button>
           ))}
         </div>
@@ -166,7 +165,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches }:
           </div>
           <div>
             <label className="label" htmlFor="cp">{t("your_phone")}</label>
-            <input id="cp" className="input" required type="tel" inputMode="tel" placeholder="07X XXX XXXX" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
+            <input id="cp" className="input" required type="tel" inputMode="tel" placeholder={`+${dial} …`} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
           </div>
           <div>
             <label className="label" htmlFor="cnote">{t("note")}</label>
@@ -175,7 +174,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches }:
           {/* honeypot: hidden from people, bots fill it */}
           <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" value={hp} onChange={(e) => setHp(e.target.value)} />
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button className="btn w-full" disabled={booking}>{booking ? "…" : `${t("confirm_booking")} · Rs. ${service.price.toLocaleString()}`}</button>
+          <button className="btn w-full" disabled={booking}>{booking ? "…" : `${t("confirm_booking")} · ${money(service.price)}`}</button>
         </section>
       )}
     </form>

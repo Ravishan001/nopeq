@@ -9,6 +9,7 @@ Salons වලට online booking platform එක. **powered by Ravion Studio**
 - Public booking page `nopeq.com/<slug>`: customer ට **login නැතුව** book කරන්න පුළුවන්
 - Booking link එකෙන් customer ට booking එක බලන්නත් cancel කරන්නත් පුළුවන් (`/b/<token>`)
 - සිංහල / English toggle + Dark / Light mode (phone setting එක අනුව ඉබේම)
+- **Worldwide:** signup කරන IP එක අනුව රට auto-suggest වෙනවා (වෙනස් කරන්නත් පුළුවන්). ඒ අනුව currency, time zone, phone format, template ගණන් සහ NopeQ plan ගණන් ඉබේම සෙට් වෙනවා
 - PWA: home screen එකට add කරන්න පුළුවන්
 
 **Tech:** Next.js 15 (App Router) · Supabase (Postgres + Auth + Storage) · Tailwind CSS 4 · Vercel
@@ -28,6 +29,8 @@ Salons වලට online booking platform එක. **powered by Ravion Studio**
 4. **Project Settings → API** එකේ තියෙන **Project URL** සහ **anon public** key දෙක copy කරගන්න
 
 > ⚠️ `service_role` key එක කවදාවත් මේ project එකට හෝ GitHub එකට දාන්න එපා. ඕන වෙන්නේ anon key එක විතරයි.
+
+> **දැනටමත් පරණ schema එක run කරලා නම්:** `supabase/migrations/002_worldwide.sql` එකත් SQL Editor එකේ run කරන්න (රට, currency, time zone support).
 
 ### 2. Vercel එකට deploy
 1. vercel.com → **Add New → Project** → GitHub එකේ `nopeq` repo එක **Import**
