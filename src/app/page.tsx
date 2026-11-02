@@ -3,10 +3,10 @@ import { Header } from "@/components/Header";
 import { Mark, Wordmark } from "@/components/Logo";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
+import { getUserFast } from "@/lib/business";
 
 const COPY = {
   si: {
-    badge: "ලංකාවේ salons වලට හැදුවේ 🇱🇰",
     steps_title: "විනාඩි 3න් live",
     steps: [
       ["1", "Account එක හදන්න", "Email එකෙන් free account එකක්. Credit card ඕන නෑ."],
@@ -17,7 +17,7 @@ const COPY = {
     feats: [
       ["🙌", "Login නැතුව booking", "Customer ට ඕන නම සහ phone number එක විතරයි."],
       ["🚫", "Double booking නෑ", "එකම වෙලාවට දෙන්නෙක්ට book කරන්න බෑ. Stylist අනුව slots."],
-      ["📍", "Branches කීපයක්", "Kuliyapitiya, Negombo වගේ branches ඔක්කොම එක තැනක."],
+      ["📍", "Branches කීපයක්", "ඔයාගේ branches ඔක්කොම එක තැනක."],
       ["✅", "Setup checklist", "Logo, photos, location වගේ ඉතුරු දේවල් tick කරලා ඉවර කරන්න."],
       ["🌙", "සිංහල / English", "Dark සහ light mode. Phone එකේ setting එක අනුව ඉබේම."],
       ["🔒", "ආරක්ෂිතයි", "එක salon එකක data අනිත් අයට පේන්නේ නෑ. Customer data safe."],
@@ -34,7 +34,6 @@ const COPY = {
     preview_title: "වෙලාවක් ගන්න",
   },
   en: {
-    badge: "Made for Sri Lankan salons 🇱🇰",
     steps_title: "Live in 3 minutes",
     steps: [
       ["1", "Create an account", "Free account with your email. No credit card."],
@@ -71,12 +70,12 @@ function PhonePreview({ title }: { title: string }) {
       <div className="relative rounded-[48px] bg-[#05070c] p-3 shadow-2xl ring-1 ring-white/10">
         <div className="rounded-[38px] overflow-hidden bg-app">
           <div className="h-24 bg-gradient-to-br from-ink to-[#2a3358]" />
-          <div className="px-5 pb-6 -mt-8">
-            <div className="flex items-end gap-3">
+          <div className="relative px-5 pb-6 -mt-8">
+            <div className="flex flex-col gap-2">
               <div className="size-16 rounded-full bg-gradient-to-br from-brand-glow to-[#EE3F18] border-4 border-[var(--bg)] flex items-center justify-center">
                 <Mark size={30} color="#fff" />
               </div>
-              <div className="pb-1">
+              <div>
                 <div className="font-display font-bold">Look Hair Studio</div>
                 <div className="text-xs text-muted">Kuliyapitiya · Negombo</div>
               </div>
@@ -106,7 +105,7 @@ export default async function Home() {
   const { t, lang } = await getT();
   const c = COPY[lang];
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUserFast(supabase);
   const start = user ? "/dashboard" : "/signup";
 
   return (
@@ -124,8 +123,7 @@ export default async function Home() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_75%_30%,rgba(240,82,31,.18),transparent_55%)]" aria-hidden />
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 lg:py-24 grid lg:grid-cols-2 gap-14 items-center">
           <div>
-            <span className="chip text-xs">{c.badge}</span>
-            <p className="font-display font-bold text-brand text-lg mt-6">{t("tagline")}</p>
+            <p className="font-display font-bold text-brand text-lg">{t("tagline")}</p>
             <h1 className="font-display font-bold text-5xl md:text-6xl xl:text-7xl tracking-tight leading-[1.05] mt-3">{t("hero_title")}</h1>
             <p className="text-lg md:text-xl text-muted mt-6 max-w-xl leading-relaxed">{t("hero_sub")}</p>
             <div className="flex flex-wrap gap-3 mt-9">

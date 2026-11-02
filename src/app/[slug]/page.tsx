@@ -59,7 +59,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
         <div className="absolute top-3 right-3"><Toggles /></div>
       </div>
       <main className="mx-auto max-w-3xl px-4">
-        <div className="-mt-12 flex items-end gap-4">
+        <div className="relative z-10 -mt-12 flex items-end gap-4">
           <div className="size-24 rounded-full border-4 border-[var(--bg)] bg-card overflow-hidden flex items-center justify-center text-3xl shrink-0 shadow-lg">
             {b.logo_url ? <img src={b.logo_url} alt={b.name} className="size-full object-cover" /> : "✂️"}
           </div>

@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getUserFast } from "@/lib/business";
 import { RESERVED_SLUGS } from "@/lib/templates";
 
 const schema = z.object({
@@ -39,7 +40,7 @@ export async function createBusiness(input: OnboardingInput): Promise<{ error: s
   if (RESERVED_SLUGS.has(d.slug)) return { error: "slug" };
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUserFast(supabase);
   if (!user) redirect("/login");
 
   const { data: biz, error } = await supabase
