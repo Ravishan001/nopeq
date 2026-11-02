@@ -16,7 +16,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
           </form>
         }
       />
-      <div className="mx-auto max-w-5xl px-4">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <nav className="flex gap-1 py-4 overflow-x-auto text-sm font-semibold">
           {[
             ["/dashboard", t("dashboard")],
