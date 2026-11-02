@@ -47,7 +47,11 @@ export async function createBusiness(input: OnboardingInput): Promise<{ error: s
     .insert({ owner_id: user.id, slug: d.slug, name: d.name, type: d.type, sections: d.sections, setup_method: "manual" })
     .select("id")
     .single();
-  if (error || !biz) return { error: error?.code === "23505" ? "slug" : "db" };
+  if (error || !biz) {
+    console.error("createBusiness insert", error);
+    if (error?.code === "23505") return { error: error.message.includes("one_per_owner") ? "exists" : "slug" };
+    return { error: `db: ${error?.message ?? "unknown"}` };
+  }
 
   const id = biz.id;
   const results = await Promise.all([
@@ -58,6 +62,11 @@ export async function createBusiness(input: OnboardingInput): Promise<{ error: s
       [0, 1, 2, 3, 4, 5, 6].map((w) => ({ business_id: id, weekday: w, is_open: d.days.includes(w), open_time: d.open, close_time: d.close }))
     ),
   ]);
-  if (results.some((r) => r?.error)) return { error: "db" };
+  const failed = results.find((r) => r?.error)?.error;
+  if (failed) {
+    console.error("createBusiness children", failed);
+    await supabase.from("businesses").delete().eq("id", id); // roll back so the owner can try again
+    return { error: `db: ${failed.message}` };
+  }
   redirect("/dashboard?welcome=1");
 }

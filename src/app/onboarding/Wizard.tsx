@@ -78,7 +78,8 @@ export function Wizard() {
         services: chosen.map((s) => ({ section: s.section, name: s.name.trim(), price: Math.round(s.price) || 0, duration: Math.round(s.duration) || 30 })),
         staff, days, open, close,
       });
-      if (res?.error) setError(res.error === "slug" ? "Link එක දැනටමත් පාවිච්චි වෙනවා / Link already taken" : t("err_generic"));
+      if (res?.error === "exists") window.location.href = "/dashboard";
+      else if (res?.error) setError(res.error === "slug" ? "Link එක දැනටමත් පාවිච්චි වෙනවා / Link already taken" : `${t("err_generic")} (${res.error})`);
     });
   }
 
