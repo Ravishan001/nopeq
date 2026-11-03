@@ -6,9 +6,10 @@ import { addBranch, addStaff, deleteService, removeBranch, removeStaff, saveHour
 import { MediaUpload } from "./MediaUpload";
 import { currencySymbol } from "@/lib/countries";
 import { ProfileForm } from "./ProfileForm";
+import { PasswordForm } from "./PasswordForm";
 
 export const metadata = { title: "Settings" };
-const TABS = ["profile", "services", "staff", "hours", "branches"] as const;
+const TABS = ["profile", "services", "staff", "hours", "branches", "account"] as const;
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { supabase, business, user } = await requireBusiness();
@@ -37,6 +38,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       {tab === "staff" && <Staff />}
       {tab === "hours" && <Hours />}
       {tab === "branches" && <Branches />}
+      {tab === "account" && <PasswordForm email={user.email} />}
     </div>
   );
 

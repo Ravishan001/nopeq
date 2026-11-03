@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   if (code) ok = !(await supabase.auth.exchangeCodeForSession(code)).error;
   else if (tokenHash && type) ok = !(await supabase.auth.verifyOtp({ token_hash: tokenHash, type })).error;
 
+  if (!ok) ok = !!(await supabase.auth.getClaims()).data?.claims?.sub; // already logged in on this browser
   if (ok) return NextResponse.redirect(`${origin}${safeNext}`);
   // Link opened in a different browser/phone: the email is usually confirmed already, so just log in.
   const url = new URL("/login", origin);
