@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { notifyBooking } from "@/lib/notify";
 import { Header, PoweredBy } from "@/components/Header";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
@@ -21,7 +23,8 @@ export default async function BookingStatus({ params, searchParams }: { params: 
   async function cancel() {
     "use server";
     const s = await createClient();
-    await s.rpc("cancel_booking", { p_token: token });
+    const { data: ok } = await s.rpc("cancel_booking", { p_token: token });
+    if (ok) after(() => notifyBooking(token, "cancelled"));
     revalidatePath(`/b/${token}`);
   }
 

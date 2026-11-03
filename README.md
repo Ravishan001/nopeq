@@ -51,6 +51,31 @@ Salons වලට online booking platform එක. **powered by Ravion Studio**
 
 ---
 
+## Notifications setup (අලුත් booking එකක් ආවම දැනුම් දෙන්න)
+
+1. **Database:** Supabase SQL Editor එකේ `supabase/migrations/003_notifications.sql` run කරන්න
+2. **Email (Resend):** resend.com → free account → **API Keys → Create** → key එක copy කරගන්න.
+   ඔයාගේම domain එකෙන් emails යවන්න **Domains → Add domain** (`nopeq.com`) කරලා DNS records ටික දාන්න.
+   Domain එක verify කරනකම් test emails යන්නේ ඔයාගේ Resend account email එකට විතරයි.
+3. **Vercel → Settings → Environment Variables** එකට මේවා add කරන්න (type: **Secret**, `NEXT_PUBLIC_` නැති ඒවා කවදාවත් public කරන්න එපා):
+   | Name | Value |
+   |---|---|
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → API Keys → **service_role / secret** key |
+   | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | VAPID public key |
+   | `VAPID_PRIVATE_KEY` | VAPID private key |
+   | `VAPID_SUBJECT` | `mailto:ඔයාගේ@email.com` |
+   | `RESEND_API_KEY` | Resend API key |
+   | `EMAIL_FROM` | `NopeQ <bookings@nopeq.com>` (verify කරපු domain එකෙන්) |
+   | `CRON_SECRET` | දිග random string එකක් |
+   ඊට පස්සේ **Redeploy**
+4. **Reminders (පැය 2කට කලින්):** `supabase/cron_reminders.sql` එකේ `YOUR-SITE` සහ `YOUR_CRON_SECRET` replace කරලා SQL Editor එකේ run කරන්න. විනාඩි 10කට වතාවක් reminder job එක run වෙනවා.
+5. **Phone push:** Dashboard → 🔔 Notifications → **On කරන්න**.
+   iPhone එකේ: Safari → Share → **Add to Home Screen** → home screen එකේ NopeQ icon එකෙන් open කරලා On කරන්න (iOS 16.4+).
+
+**Notifications යන්නේ:**
+- Owner ට: අලුත් booking එකක් සහ customer cancel කළොත් → push + email (dashboard එකෙන් on/off කරන්න පුළුවන්)
+- Customer ට (email එක දුන්නොත්): booking confirmation email එක + පැය 2කට කලින් reminder email එක
+
 ## Local එකේ run කරන්න (optional)
 ```bash
 npm install
@@ -71,7 +96,8 @@ npm run dev                  # http://localhost:3000
 
 ## ඊළඟට (roadmap)
 - [ ] AI setup chat (Claude) + AI agent (web + WhatsApp)
-- [ ] WhatsApp / SMS booking confirmation + reminders
+- [x] Push + email notifications, email reminders
+- [ ] WhatsApp / SMS confirmation + reminders
 - [ ] Cloudflare Turnstile check එක
 - [ ] PayHere subscriptions (Pro / AI plans)
 - [ ] Pro plan එකට business logo එකෙන් PWA icon එක

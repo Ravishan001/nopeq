@@ -8,6 +8,7 @@ export type Business = {
   address: string | null; maps_url: string | null; facebook: string | null; instagram: string | null;
   tiktok: string | null; plan: string; is_published: boolean;
   country: string; currency: string; timezone: string;
+  notify_email: boolean; notify_push: boolean;
 };
 
 /** The logged-in owner's business. Redirects to /login or /onboarding when missing. */

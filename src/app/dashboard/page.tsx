@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { BOOKING_SELECT, BookingRow, type BookingRowData } from "@/components/BookingRow";
 import { ShareCard } from "@/components/ShareCard";
+import { PushToggle } from "@/components/PushToggle";
+import { setNotifyPrefs } from "./notify-actions";
 import { requireBusiness } from "@/lib/business";
 import { getT } from "@/lib/lang";
 import { siteUrl } from "@/lib/site";
@@ -46,6 +48,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </div>
         )}
         <ShareCard url={url} />
+        <section className="card p-5 space-y-4">
+          <h2 className="font-display font-bold text-lg">🔔 {t("notif_title")}</h2>
+          <PushToggle />
+          <form action={setNotifyPrefs} className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line pt-4 text-sm">
+            <label className="flex items-center gap-2"><input type="checkbox" name="notify_email" defaultChecked={business.notify_email} className="size-4 accent-[#F0521F]" />{t("notif_email")}</label>
+            <label className="flex items-center gap-2"><input type="checkbox" name="notify_push" defaultChecked={business.notify_push} className="size-4 accent-[#F0521F]" />{t("notif_push")}</label>
+            <button className="btn-ghost h-9 text-sm ml-auto">{t("save")}</button>
+          </form>
+        </section>
         <section>
           <h2 className="font-display font-bold text-xl mb-3">{t("upcoming")}</h2>
           <div className="space-y-2">

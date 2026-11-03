@@ -37,6 +37,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
+  const [email, setEmail] = useState("");
   const [hp, setHp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loadingSlots, startSlots] = useTransition();
@@ -60,7 +61,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
     setError(null);
     startBooking(async () => {
       let res: { token?: string; error?: string };
-      try { res = await book({ businessId, branchId: branch, serviceId: service.id, staffId, date, time, name, phone, note, website: hp }); }
+      try { res = await book({ businessId, branchId: branch, serviceId: service.id, staffId, date, time, name, phone, note, email, website: hp }); }
       catch { res = { error: "generic" }; }
       if (res.token) router.push(`/b/${res.token}?new=1`);
       else {
@@ -166,6 +167,11 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
           <div>
             <label className="label" htmlFor="cp">{t("your_phone")}</label>
             <input id="cp" className="input" required type="tel" inputMode="tel" placeholder={`+${dial} …`} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
+          </div>
+          <div>
+            <label className="label" htmlFor="cemail">{t("your_email")}</label>
+            <input id="cemail" className="input" type="email" inputMode="email" maxLength={120} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            <p className="text-xs text-muted mt-1">{t("email_hint")}</p>
           </div>
           <div>
             <label className="label" htmlFor="cnote">{t("note")}</label>

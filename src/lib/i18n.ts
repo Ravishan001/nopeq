@@ -128,6 +128,20 @@ const si = {
   err_generic: "මොකක් හරි වැරදුණා. ආයෙ try කරන්න.",
   err_phone: "Phone number එක හරියට දාන්න",
   not_found: "මේ page එක හොයාගන්න බෑ",
+  notif_title: "Notifications",
+  notif_email: "අලුත් bookings email එකට එවන්න",
+  notif_push: "Phone එකට push notifications",
+  push_title: "මේ phone එකට notifications",
+  push_sub: "අලුත් booking එකක් ආපු ගමන් phone එකට notification එකක් එනවා.",
+  push_on: "✅ On. අලුත් bookings මේ device එකට එනවා.",
+  push_denied: "Notifications block කරලා. Browser settings එකෙන් allow කරන්න.",
+  push_ios: "iPhone: Share → \"Add to Home Screen\" කරලා, home screen එකේ NopeQ icon එකෙන් open කරලා මෙතන On කරන්න.",
+  push_unsupported: "මේ browser එකේ push notifications වැඩ කරන්නේ නෑ.",
+  push_enable: "On කරන්න",
+  push_disable: "Off කරන්න",
+  push_test_sent: "Test notification එකක් යැව්වා 🔔",
+  your_email: "Email (optional)",
+  email_hint: "Confirmation එකයි පැය 2කට කලින් reminder එකයි email එකට එවන්නම්.",
 };
 
 const en: typeof si = {
@@ -255,6 +269,20 @@ const en: typeof si = {
   err_generic: "Something went wrong. Please try again.",
   err_phone: "Enter a valid phone number",
   not_found: "Page not found",
+  notif_title: "Notifications",
+  notif_email: "Email me new bookings",
+  notif_push: "Push notifications to my phone",
+  push_title: "Notifications on this device",
+  push_sub: "Get a notification the moment a new booking comes in.",
+  push_on: "✅ On. New bookings will appear on this device.",
+  push_denied: "Notifications are blocked. Allow them in your browser settings.",
+  push_ios: "iPhone: tap Share → \"Add to Home Screen\", open NopeQ from the home screen, then turn this on.",
+  push_unsupported: "Push notifications aren't supported in this browser.",
+  push_enable: "Turn on",
+  push_disable: "Turn off",
+  push_test_sent: "Test notification sent 🔔",
+  your_email: "Email (optional)",
+  email_hint: "We'll email your confirmation and a reminder 2 hours before.",
 };
 
 export const dict = { si, en };
