@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header } from "@/components/Header";
+import { InstallButton } from "@/components/InstallButton";
 import { Mark, Wordmark } from "@/components/Logo";
 import { getT } from "@/lib/lang";
 import { createClient } from "@/lib/supabase/server";
@@ -135,6 +136,7 @@ export default async function Home() {
             <div className="flex flex-wrap gap-3 mt-9">
               <Link href={start} className="btn h-14 px-7 text-lg">{t("start_free")} →</Link>
               {!user && <Link href="/login" className="btn-ghost h-14 px-7 text-lg">{t("login")}</Link>}
+              <InstallButton compact className="sm:hidden !h-14 !px-7 !text-lg" />
             </div>
           </div>
           <PhonePreview title={c.preview_title} country={country} />

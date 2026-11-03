@@ -3,6 +3,7 @@ import { Header } from "@/components/Header";
 import { requireBusiness } from "@/lib/business";
 import { getT } from "@/lib/lang";
 import { signOut } from "./actions";
+import { InstallButton } from "@/components/InstallButton";
 
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
   const { business } = await requireBusiness();
@@ -27,6 +28,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
           ))}
           <Link href={`/${business.slug}`} target="_blank" className="ml-auto px-4 py-2 rounded-full text-brand whitespace-nowrap">{t("view_page")} ↗</Link>
         </nav>
+        <div className="sm:hidden mb-4"><InstallButton className="w-full" /></div>
         <main className="pb-16">{children}</main>
       </div>
     </>

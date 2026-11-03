@@ -2,7 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/dashboard",
     name: "NopeQ",
+    scope: "/",
     short_name: "NopeQ",
     description: "Nope to queues. Book your time.",
     start_url: "/dashboard",
