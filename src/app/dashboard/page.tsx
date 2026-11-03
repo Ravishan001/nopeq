@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BOOKING_SELECT, BookingRow, type BookingRowData } from "@/components/BookingRow";
 import { ShareCard } from "@/components/ShareCard";
 import { PushToggle } from "@/components/PushToggle";
+import { NotifyStatus } from "@/components/NotifyStatus";
 import { setNotifyPrefs } from "./notify-actions";
 import { requireBusiness } from "@/lib/business";
 import { getT } from "@/lib/lang";
@@ -56,6 +57,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <label className="flex items-center gap-2"><input type="checkbox" name="notify_push" defaultChecked={business.notify_push} className="size-4 accent-[#F0521F]" />{t("notif_push")}</label>
             <button className="btn-ghost h-9 text-sm ml-auto">{t("save")}</button>
           </form>
+          <NotifyStatus lang={lang} />
         </section>
         <section>
           <h2 className="font-display font-bold text-xl mb-3">{t("upcoming")}</h2>
