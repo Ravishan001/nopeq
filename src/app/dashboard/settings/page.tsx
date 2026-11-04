@@ -7,6 +7,7 @@ import { MediaUpload } from "./MediaUpload";
 import { currencySymbol } from "@/lib/countries";
 import { ProfileForm } from "./ProfileForm";
 import { PasswordForm } from "./PasswordForm";
+import { setNotifyPrefs } from "../notify-actions";
 
 export const metadata = { title: "Settings" };
 const TABS = ["profile", "services", "staff", "hours", "branches", "account"] as const;
@@ -38,7 +39,17 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       {tab === "staff" && <Staff />}
       {tab === "hours" && <Hours />}
       {tab === "branches" && <Branches />}
-      {tab === "account" && <PasswordForm email={user.email} />}
+      {tab === "account" && (
+        <div className="space-y-6">
+          <PasswordForm email={user.email} />
+          <form action={setNotifyPrefs} className="card p-6 max-w-md space-y-3">
+            <h2 className="font-display font-bold text-lg">🔔 {t("notif_title")}</h2>
+            <label className="flex items-center gap-3"><input type="checkbox" name="notify_push" defaultChecked={business.notify_push} className="size-5 accent-[#F0521F]" />{t("notif_push")}</label>
+            <label className="flex items-center gap-3"><input type="checkbox" name="notify_email" defaultChecked={business.notify_email} className="size-5 accent-[#F0521F]" />{t("notif_email")}</label>
+            <button className="btn h-10">{t("save")}</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 

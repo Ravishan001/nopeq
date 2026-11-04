@@ -57,17 +57,30 @@ export function PushToggle() {
     setState("off"); setBusy(false);
   }
 
+  const on = state === "on";
+  const canToggle = state === "on" || state === "off";
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="flex-1 min-w-48">
-        <div className="font-semibold">📲 {t("push_title")}</div>
+    <div className="flex items-center gap-4">
+      <div className="size-11 rounded-2xl bg-soft flex items-center justify-center text-xl shrink-0">🔔</div>
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold">{t("push_title")}</div>
         <div className="text-sm text-muted">
-          {state === "on" ? t("push_on") : state === "denied" ? t("push_denied") : state === "ios-install" ? t("push_ios") : state === "unsupported" ? t("push_unsupported") : t("push_sub")}
+          {on ? t("push_on") : state === "denied" ? t("push_denied") : state === "ios-install" ? t("push_ios") : state === "unsupported" ? t("push_unsupported") : t("push_sub")}
         </div>
         {msg && <div className="text-sm text-green-600 dark:text-green-400 mt-1">{msg}</div>}
       </div>
-      {state === "off" && <button className="btn h-10" disabled={busy} onClick={enable}>{t("push_enable")}</button>}
-      {state === "on" && <button className="btn-ghost h-10" disabled={busy} onClick={disable}>{t("push_disable")}</button>}
+      {canToggle && (
+        <button
+          role="switch"
+          aria-checked={on}
+          aria-label={t("push_title")}
+          disabled={busy}
+          onClick={on ? disable : enable}
+          className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-60 ${on ? "bg-brand" : "bg-black/15 dark:bg-white/15"}`}
+        >
+          <span className={`absolute top-1 left-1 size-6 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : ""}`} />
+        </button>
+      )}
     </div>
   );
 }

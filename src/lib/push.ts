@@ -30,7 +30,7 @@ function init() {
   return true;
 }
 
-export type PushPayload = { title: string; body: string; url: string; tag?: string };
+export type PushPayload = { title: string; body: string; url: string; tag?: string; icon?: string; actionLabel?: string };
 
 /** Push to every device an owner has enabled. Dead subscriptions are removed. */
 export async function pushToOwner(admin: SupabaseClient, ownerId: string, payload: PushPayload, errors?: string[]) {

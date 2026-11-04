@@ -9,10 +9,10 @@ type Row = {
   id: string; token: string; status: string; starts_at: string; customer_name: string; customer_phone: string;
   customer_email: string | null; note: string | null;
   services: { name: string; price: number } | null; staff: { name: string } | null; branches: { name: string } | null;
-  businesses: { id: string; owner_id: string; name: string; slug: string; country: string; currency: string; timezone: string; notify_email: boolean; notify_push: boolean };
+  businesses: { id: string; owner_id: string; name: string; slug: string; logo_url: string | null; country: string; currency: string; timezone: string; notify_email: boolean; notify_push: boolean };
 };
 
-const SELECT = "id, token, status, starts_at, customer_name, customer_phone, customer_email, note, services(name, price), staff(name), branches(name), businesses(id, owner_id, name, slug, country, currency, timezone, notify_email, notify_push)";
+const SELECT = "id, token, status, starts_at, customer_name, customer_phone, customer_email, note, services(name, price), staff(name), branches(name), businesses(id, owner_id, name, slug, logo_url, country, currency, timezone, notify_email, notify_push)";
 const site = () => (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
 
 function words(lk: boolean) {
@@ -49,6 +49,30 @@ async function ownerEmail(admin: NonNullable<ReturnType<typeof adminClient>>, ow
   return data.user?.email ?? null;
 }
 
+/** A clean, scannable phone notification (dates in a short English format so every phone shows them well). */
+function pushMessage(b: Row, kind: "new" | "cancelled") {
+  const biz = b.businesses;
+  const lk = biz.country === "LK";
+  const d = new Date(b.starts_at);
+  const day = new Intl.DateTimeFormat("en-GB", { timeZone: biz.timezone, weekday: "short", day: "numeric", month: "short" }).format(d);
+  const time = new Intl.DateTimeFormat("en-US", { timeZone: biz.timezone, hour: "numeric", minute: "2-digit" }).format(d);
+  const service = b.services?.name ?? "Booking";
+  const head = kind === "new" ? (lk ? "🔔 අලුත් booking" : "🔔 New booking") : (lk ? "❌ Cancel කළා" : "❌ Cancelled");
+  const lines = [
+    `🗓 ${day} · ${time}`,
+    [b.staff ? `✂️ ${b.staff.name}` : null, b.branches ? `📍 ${b.branches.name}` : null].filter(Boolean).join("  ·  "),
+    b.services ? `💰 ${formatMoney(Number(b.services.price), biz.currency)}` : null,
+  ].filter(Boolean);
+  return {
+    title: `${head} · ${b.customer_name} — ${service}`,
+    body: lines.join("\n"),
+    url: "/dashboard/bookings",
+    tag: `booking-${b.id}`,
+    icon: biz.logo_url ?? undefined,
+    actionLabel: lk ? "බලන්න" : "View",
+  };
+}
+
 /** New booking or cancellation → owner (push + email) and, for new bookings, customer confirmation email. */
 export async function notifyBooking(token: string, kind: "new" | "cancelled") {
   try {
@@ -63,12 +87,7 @@ export async function notifyBooking(token: string, kind: "new" | "cancelled") {
 
     const jobs: Promise<unknown>[] = [];
     if (biz.notify_push) {
-      jobs.push(pushToOwner(admin, biz.owner_id, {
-        title: `${title} · ${biz.name}`,
-        body: `${b.customer_name} · ${b.services?.name ?? ""} · ${when}${b.staff ? ` · ${b.staff.name}` : ""}`,
-        url: "/dashboard/bookings",
-        tag: `booking-${b.id}`,
-      }));
+      jobs.push(pushToOwner(admin, biz.owner_id, pushMessage(b, kind)));
     }
     if (biz.notify_email) {
       jobs.push(ownerEmail(admin, biz.owner_id).then((to): Promise<boolean> | false =>

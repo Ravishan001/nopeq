@@ -3,14 +3,18 @@ self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (event) => {
-  let data = { title: "NopeQ", body: "", url: "/dashboard", tag: undefined };
-  try { data = { ...data, ...event.data.json() }; } catch {}
-  event.waitUntil(self.registration.showNotification(data.title, {
-    body: data.body,
-    tag: data.tag,
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    data: { url: data.url },
+  let d = { title: "NopeQ", body: "", url: "/dashboard" };
+  try { d = { ...d, ...event.data.json() }; } catch {}
+  event.waitUntil(self.registration.showNotification(d.title, {
+    body: d.body,
+    tag: d.tag,
+    renotify: !!d.tag,
+    icon: d.icon || "/icons/icon-192.png",
+    badge: "/icons/badge-96.png",
+    timestamp: Date.now(),
+    vibrate: [80, 40, 80],
+    data: { url: d.url },
+    actions: d.actionLabel ? [{ action: "open", title: d.actionLabel }] : [],
   }));
 });
 
