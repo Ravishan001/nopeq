@@ -111,7 +111,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
   );
 
   return (
-    <div className="min-h-dvh pb-28">
+    <div className="min-h-dvh pb-28 overflow-x-clip">
       {/* cover */}
       <div className="relative h-56 sm:h-72 bg-gradient-to-br from-ink via-[#1E2541] to-[#3a2a4a] overflow-hidden">
         {b.cover_url && <img src={b.cover_url} alt="" className="absolute inset-0 size-full object-cover" />}
@@ -151,8 +151,8 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
           </div>
         )}
 
-        <div className="grid lg:grid-cols-[1fr_340px] gap-8 mt-10">
-          <div>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-8 mt-10">
+          <div className="min-w-0">
             <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight">{t("book_title")}</h2>
             <p className="text-muted mt-1">{t("no_login")}</p>
             <div className="mt-6">
@@ -163,7 +163,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
               )}
             </div>
           </div>
-          <aside className="lg:sticky lg:top-6 h-fit">{InfoCard}</aside>
+          <aside className="min-w-0 lg:sticky lg:top-6 h-fit">{InfoCard}</aside>
         </div>
 
         <div className="mt-16 flex flex-col items-center gap-1 text-xs text-muted">

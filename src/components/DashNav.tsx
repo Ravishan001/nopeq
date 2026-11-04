@@ -20,14 +20,14 @@ export function DashNav({ labels, slug, viewLabel }: { labels: { dashboard: stri
   ];
   const active = (h: string) => (h === "/dashboard" ? path === h : path.startsWith(h));
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-5">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-4 sm:py-5">
       <nav className="flex p-1 rounded-2xl bg-card border border-line w-full sm:w-auto" aria-label="Dashboard">
         {items.map((it) => (
           <Link
             key={it.href}
             href={it.href}
             aria-current={active(it.href) ? "page" : undefined}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-sm font-semibold transition-all ${
+            className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 h-14 sm:h-11 px-2 sm:px-5 rounded-xl text-xs sm:text-sm font-semibold text-center transition-all ${
               active(it.href) ? "bg-brand text-white shadow-md shadow-brand/30" : "text-muted hover:text-fg hover:bg-black/5 dark:hover:bg-white/5"
             }`}
           >
@@ -39,7 +39,7 @@ export function DashNav({ labels, slug, viewLabel }: { labels: { dashboard: stri
       <a
         href={`/${slug}`}
         target="_blank"
-        className="sm:ml-auto inline-flex items-center justify-center gap-2 h-11 px-5 rounded-2xl border-2 border-brand/40 text-brand font-semibold text-sm hover:bg-brand hover:text-white hover:border-brand transition-all"
+        className="w-full sm:w-auto sm:ml-auto inline-flex items-center justify-center gap-2 h-11 px-5 rounded-2xl border-2 border-brand/40 text-brand font-semibold text-sm hover:bg-brand hover:text-white hover:border-brand transition-all"
       >
         {viewLabel} {I.ext}
       </a>

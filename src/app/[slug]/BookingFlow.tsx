@@ -52,6 +52,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
   const [section, setSection] = useState<string | null>(sectionList[0] ?? null);
   const [service, setService] = useState<Service | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
+  const [staffPicked, setStaffPicked] = useState(false);
   const [date, setDate] = useState(days[0].date);
   const [slots, setSlots] = useState<{ closed: boolean; slots: string[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
@@ -64,6 +65,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
   const [loadingSlots, startSlots] = useTransition();
   const [booking, startBooking] = useTransition();
   const timeRef = useRef<HTMLDivElement>(null);
+  const staffRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,9 +98,15 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
   const chosenDay = days.find((d) => d.date === date)!;
   const dayLabel = (d: (typeof days)[number]) => (d.i === 0 ? (si ? "අද" : "Today") : d.i === 1 ? (si ? "හෙට" : "Tomorrow") : WEEKDAYS[lang][d.dow]);
 
+  const scrollTo = (r: React.RefObject<HTMLDivElement | null>) => setTimeout(() => r.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
   function pickService(s: Service) {
     setService(s);
-    setTimeout(() => timeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    scrollTo(staff.length > 0 ? staffRef : timeRef);
+  }
+  function pickStaff(id: string | null) {
+    setStaffId(id);
+    setStaffPicked(true);
+    scrollTo(timeRef);
   }
   function pickTime(s: string) {
     setTime(s);
@@ -124,7 +132,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
 
   let n = 1;
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4 min-w-0">
       {branches.length > 1 && (
         <Step n={n++} title={t("choose_branch")} done={!!branch}>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -172,13 +180,14 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
       </Step>
 
       {service && staff.length > 0 && (
-        <Step n={n++} title={t("choose_staff")} done>
+        <div ref={staffRef} className="scroll-mt-4">
+        <Step n={n++} title={t("choose_staff")} done={staffPicked}>
           <div className="flex gap-3 overflow-x-auto py-2 -mx-1 px-2">
             {[{ id: null as string | null, name: t("any_staff") }, ...staff].map((s, i) => {
               const on = staffId === s.id;
               return (
-                <button key={s.id ?? "any"} type="button" onClick={() => setStaffId(s.id)} className="shrink-0 w-20 flex flex-col items-center gap-2">
-                  <span className={`size-16 rounded-full flex items-center justify-center text-lg font-bold text-white transition ring-offset-2 ring-offset-[var(--card)] ${on ? "ring-[3px] ring-brand scale-105" : "opacity-85"}`}
+                <button key={s.id ?? "any"} type="button" onClick={() => pickStaff(s.id)} className="shrink-0 w-20 flex flex-col items-center gap-2">
+                  <span className={`size-16 rounded-full flex items-center justify-center text-lg font-bold text-white transition ring-offset-2 ring-offset-[var(--card)] ${on && staffPicked ? "ring-[3px] ring-brand scale-105" : "opacity-85"}`}
                     style={{ background: s.id ? AVATAR[(i - 1) % AVATAR.length] : "linear-gradient(135deg,#FF7A2F,#EE3F18)" }}>
                     {s.id ? initials(s.name) : "✦"}
                   </span>
@@ -188,6 +197,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
             })}
           </div>
         </Step>
+        </div>
       )}
 
       {service && (
