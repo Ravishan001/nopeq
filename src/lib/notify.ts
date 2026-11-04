@@ -49,27 +49,24 @@ async function ownerEmail(admin: NonNullable<ReturnType<typeof adminClient>>, ow
   return data.user?.email ?? null;
 }
 
-/** A clean, scannable phone notification (dates in a short English format so every phone shows them well). */
+const titleCase = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase().replace(/(^|[\s\-'])(\p{L})/gu, (_, p, c) => p + c.toUpperCase());
+
+/** Clean, scannable phone notification — always in English so it reads the same on every phone. */
 function pushMessage(b: Row, kind: "new" | "cancelled") {
   const biz = b.businesses;
-  const lk = biz.country === "LK";
   const d = new Date(b.starts_at);
   const day = new Intl.DateTimeFormat("en-GB", { timeZone: biz.timezone, weekday: "short", day: "numeric", month: "short" }).format(d);
   const time = new Intl.DateTimeFormat("en-US", { timeZone: biz.timezone, hour: "numeric", minute: "2-digit" }).format(d);
-  const service = b.services?.name ?? "Booking";
-  const head = kind === "new" ? (lk ? "🔔 අලුත් booking" : "🔔 New booking") : (lk ? "❌ Cancel කළා" : "❌ Cancelled");
-  const lines = [
-    `🗓 ${day} · ${time}`,
-    [b.staff ? `✂️ ${b.staff.name}` : null, b.branches ? `📍 ${b.branches.name}` : null].filter(Boolean).join("  ·  "),
-    b.services ? `💰 ${formatMoney(Number(b.services.price), biz.currency)}` : null,
-  ].filter(Boolean);
+  const name = titleCase(b.customer_name);
+  const service = b.services ? `${b.services.name} · ${formatMoney(Number(b.services.price), biz.currency)}` : "Booking";
+  const who = [b.staff && `with ${b.staff.name}`, b.branches?.name].filter(Boolean).join(" · ");
   return {
-    title: `${head} · ${b.customer_name} — ${service}`,
-    body: lines.join("\n"),
+    title: kind === "new" ? `New booking · ${name}` : `Cancelled · ${name}`,
+    body: [service, `${day} at ${time}`, who].filter(Boolean).join("\n"),
     url: "/dashboard/bookings",
     tag: `booking-${b.id}`,
     icon: biz.logo_url ?? undefined,
-    actionLabel: lk ? "බලන්න" : "View",
+    actionLabel: "View booking",
   };
 }
 

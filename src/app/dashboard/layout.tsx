@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { DashNav } from "@/components/DashNav";
 import { Header } from "@/components/Header";
 import { requireBusiness } from "@/lib/business";
 import { getT } from "@/lib/lang";
@@ -18,16 +18,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
         }
       />
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <nav className="flex gap-1 py-4 overflow-x-auto text-sm font-semibold">
-          {[
-            ["/dashboard", t("dashboard")],
-            ["/dashboard/bookings", t("bookings")],
-            ["/dashboard/settings", t("settings")],
-          ].map(([href, label]) => (
-            <Link key={href} href={href} className="px-4 py-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10">{label}</Link>
-          ))}
-          <Link href={`/${business.slug}`} target="_blank" className="ml-auto px-4 py-2 rounded-full text-brand whitespace-nowrap">{t("view_page")} ↗</Link>
-        </nav>
+        <DashNav labels={{ dashboard: t("dashboard"), bookings: t("bookings"), settings: t("settings") }} slug={business.slug} viewLabel={t("view_page")} />
         <div className="sm:hidden mb-4"><InstallButton className="w-full" /></div>
         <main className="pb-16">{children}</main>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useLang, useT } from "@/components/I18nProvider";
 import { WEEKDAYS } from "@/lib/i18n";
 import { book, getSlots } from "./actions";
@@ -10,11 +10,31 @@ import { todayIn, weekdayOf } from "@/lib/time";
 type Service = { id: string; name: string; section: string | null; price: number; duration_min: number };
 type Named = { id: string; name: string };
 
+const MONTHS = { si: ["ජන", "පෙබ", "මාර්", "අප්‍රේ", "මැයි", "ජූනි", "ජූලි", "අගෝ", "සැප්", "ඔක්", "නොවැ", "දෙසැ"], en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] };
+const AVATAR = ["#F0521F", "#7C3AED", "#0EA5E9", "#16A34A", "#DB2777", "#CA8A04", "#0D9488"];
+
 function nextDays(n: number, tz: string) {
   return Array.from({ length: n }, (_, i) => {
     const date = todayIn(tz, i);
-    return { date, dow: weekdayOf(date), day: Number(date.slice(8)) };
+    return { date, dow: weekdayOf(date), day: Number(date.slice(8)), month: Number(date.slice(5, 7)) - 1, i };
   });
+}
+const to12 = (s: string) => {
+  const [h, m] = s.split(":").map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+};
+const initials = (n: string) => n.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
+function Step({ n, title, done, children }: { n: number; title: string; done?: boolean; children: React.ReactNode }) {
+  return (
+    <section className="card p-5 sm:p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <span className={`size-8 rounded-full flex items-center justify-center text-sm font-bold transition ${done ? "bg-green-600 text-white" : "bg-brand text-white"}`}>{done ? "✓" : n}</span>
+        <h3 className="font-display font-bold text-lg">{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function BookingFlow({ businessId, sections, services, staff, branches, currency, timezone, dial }: {
@@ -22,9 +42,10 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
 }) {
   const t = useT();
   const lang = useLang();
+  const si = lang === "si";
   const router = useRouter();
-  const days = useMemo(() => nextDays(14, timezone), [timezone]);
-  const money = (n: number) => formatMoney(Number(n), currency, lang === "si" ? "si-LK" : "en");
+  const days = useMemo(() => nextDays(21, timezone), [timezone]);
+  const money = (n: number) => formatMoney(Number(n), currency, si ? "si-LK" : "en");
   const sectionList = sections.filter((s) => services.some((x) => x.section === s));
 
   const [branch, setBranch] = useState<string | null>(branches[0]?.id ?? null);
@@ -42,6 +63,8 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
   const [error, setError] = useState<string | null>(null);
   const [loadingSlots, startSlots] = useTransition();
   const [booking, startBooking] = useTransition();
+  const timeRef = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setTime(null);
@@ -53,11 +76,39 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, date, service, staffId]);
 
-  const visible = services.filter((s) => !section || s.section === section);
+  const visible = sectionList.length > 1 && section
+    ? services.filter((s) => s.section === section || !sectionList.includes(s.section ?? ""))
+    : services;
+  const groups = useMemo(() => {
+    const g: { key: string; label: string; items: string[] }[] = [
+      { key: "m", label: si ? "🌅 උදේ" : "🌅 Morning", items: [] },
+      { key: "a", label: si ? "☀️ දවල්" : "☀️ Afternoon", items: [] },
+      { key: "e", label: si ? "🌙 හවස" : "🌙 Evening", items: [] },
+    ];
+    for (const s of slots?.slots ?? []) {
+      const h = Number(s.slice(0, 2));
+      (h < 12 ? g[0] : h < 17 ? g[1] : g[2]).items.push(s);
+    }
+    return g.filter((x) => x.items.length);
+  }, [slots, si]);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  const ready = !!service && !!time && name.trim().length >= 2 && phone.trim().length >= 6;
+  const chosenDay = days.find((d) => d.date === date)!;
+  const dayLabel = (d: (typeof days)[number]) => (d.i === 0 ? (si ? "අද" : "Today") : d.i === 1 ? (si ? "හෙට" : "Tomorrow") : WEEKDAYS[lang][d.dow]);
+
+  function pickService(s: Service) {
+    setService(s);
+    setTimeout(() => timeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+  }
+  function pickTime(s: string) {
+    setTime(s);
+    setTimeout(() => detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+  }
+
+  function submit(e?: React.FormEvent) {
+    e?.preventDefault();
     if (!service || !time) return;
+    if (!ready) { detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
     setError(null);
     startBooking(async () => {
       let res: { token?: string; error?: string };
@@ -71,117 +122,167 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
     });
   }
 
-  const h = "font-display font-bold text-lg mb-3";
+  let n = 1;
   return (
-    <form onSubmit={submit} className="space-y-8">
+    <form onSubmit={submit} className="space-y-4">
       {branches.length > 1 && (
-        <section>
-          <h2 className={h}>{t("choose_branch")}</h2>
-          <div className="flex flex-wrap gap-2">
+        <Step n={n++} title={t("choose_branch")} done={!!branch}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {branches.map((b) => (
-              <button key={b.id} type="button" className={`chip ${branch === b.id ? "chip-on" : ""}`} onClick={() => setBranch(b.id)}>📍 {b.name}</button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section>
-        <h2 className={h}>{t("choose_service")}</h2>
-        {sectionList.length > 1 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {sectionList.map((s) => (
-              <button key={s} type="button" className={`chip ${section === s ? "chip-on" : ""}`} onClick={() => { setSection(s); setService(null); }}>{s}</button>
-            ))}
-          </div>
-        )}
-        <div className="grid sm:grid-cols-2 gap-2">
-          {visible.map((s) => (
-            <button key={s.id} type="button" onClick={() => setService(s)}
-              className={`card p-4 text-left flex justify-between items-center gap-3 transition ${service?.id === s.id ? "border-brand bg-soft ring-2 ring-brand/20" : "hover:border-brand"}`}>
-              <span>
-                <span className="font-semibold block">{s.name}</span>
-                <span className="text-sm text-muted">{s.duration_min} {t("min")}</span>
-              </span>
-              <span className="font-bold whitespace-nowrap">{money(s.price)}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {service && staff.length > 0 && (
-        <section>
-          <h2 className={h}>{t("choose_staff")}</h2>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={`chip ${staffId === null ? "chip-on" : ""}`} onClick={() => setStaffId(null)}>{t("any_staff")}</button>
-            {staff.map((s) => (
-              <button key={s.id} type="button" className={`chip ${staffId === s.id ? "chip-on" : ""}`} onClick={() => setStaffId(s.id)}>{s.name}</button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {service && (
-        <section>
-          <h2 className={h}>{t("choose_date")}</h2>
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-            {days.map((d) => (
-              <button key={d.date} type="button" onClick={() => setDate(d.date)}
-                className={`shrink-0 w-16 py-2.5 rounded-2xl border text-center transition ${date === d.date ? "bg-brand text-white border-brand" : "border-line bg-card"}`}>
-                <div className="text-xs font-semibold opacity-80">{WEEKDAYS[lang][d.dow]}</div>
-                <div className="font-display font-bold text-xl">{d.day}</div>
+              <button key={b.id} type="button" onClick={() => setBranch(b.id)}
+                className={`h-12 rounded-xl border-2 font-semibold text-sm transition ${branch === b.id ? "border-brand bg-soft text-brand" : "border-line bg-card hover:border-brand/50"}`}>
+                📍 {b.name}
               </button>
             ))}
           </div>
-          <h2 className={`${h} mt-6`}>{t("choose_time")}</h2>
-          {loadingSlots || !slots ? (
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">{Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-11 rounded-xl bg-black/5 dark:bg-white/5 animate-pulse" />)}</div>
-          ) : slots.closed ? (
-            <p className="text-muted">{t("closed_day")}</p>
-          ) : slots.slots.length === 0 ? (
-            <p className="text-muted">{t("no_slots")}</p>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {slots.slots.map((s) => {
-                const [hh, mm] = s.split(":").map(Number);
-                const lbl = `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${hh < 12 ? "AM" : "PM"}`;
+        </Step>
+      )}
+
+      <Step n={n++} title={t("choose_service")} done={!!service}>
+        {sectionList.length > 1 && (
+          <div className="flex p-1 rounded-xl bg-black/5 dark:bg-white/5 mb-4 overflow-x-auto">
+            {sectionList.map((s) => (
+              <button key={s} type="button" onClick={() => setSection(s)}
+                className={`flex-1 min-w-20 h-10 rounded-lg text-sm font-semibold transition ${section === s ? "bg-card shadow text-fg" : "text-muted"}`}>
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="grid sm:grid-cols-2 gap-2.5">
+          {visible.map((s) => {
+            const on = service?.id === s.id;
+            return (
+              <button key={s.id} type="button" onClick={() => pickService(s)}
+                className={`group text-left rounded-2xl border-2 p-4 transition ${on ? "border-brand bg-soft" : "border-line bg-card hover:border-brand/50 hover:-translate-y-0.5"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="font-semibold leading-snug">{s.name}</span>
+                  <span className={`size-5 shrink-0 rounded-full border-2 flex items-center justify-center ${on ? "border-brand bg-brand" : "border-line"}`}>
+                    {on && <span className="size-2 rounded-full bg-white" />}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-xs font-semibold text-muted bg-black/5 dark:bg-white/10 rounded-full px-2.5 py-1">⏱ {s.duration_min} {t("min")}</span>
+                  <span className="font-display font-bold">{money(s.price)}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Step>
+
+      {service && staff.length > 0 && (
+        <Step n={n++} title={t("choose_staff")} done>
+          <div className="flex gap-3 overflow-x-auto py-2 -mx-1 px-2">
+            {[{ id: null as string | null, name: t("any_staff") }, ...staff].map((s, i) => {
+              const on = staffId === s.id;
+              return (
+                <button key={s.id ?? "any"} type="button" onClick={() => setStaffId(s.id)} className="shrink-0 w-20 flex flex-col items-center gap-2">
+                  <span className={`size-16 rounded-full flex items-center justify-center text-lg font-bold text-white transition ring-offset-2 ring-offset-[var(--card)] ${on ? "ring-[3px] ring-brand scale-105" : "opacity-85"}`}
+                    style={{ background: s.id ? AVATAR[(i - 1) % AVATAR.length] : "linear-gradient(135deg,#FF7A2F,#EE3F18)" }}>
+                    {s.id ? initials(s.name) : "✦"}
+                  </span>
+                  <span className={`text-xs text-center leading-tight ${on ? "font-bold text-brand" : "font-medium text-muted"}`}>{s.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Step>
+      )}
+
+      {service && (
+        <div ref={timeRef} className="scroll-mt-4">
+          <Step n={n++} title={`${t("choose_date")} & ${si ? "වෙලාව" : "time"}`} done={!!time}>
+            <div className="text-sm font-semibold text-muted mb-2">{MONTHS[lang][chosenDay.month]} {date.slice(0, 4)}</div>
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
+              {days.map((d) => {
+                const on = date === d.date;
                 return (
-                  <button key={s} type="button" onClick={() => setTime(s)}
-                    className={`h-11 rounded-xl border text-sm font-bold transition ${time === s ? "bg-brand text-white border-brand" : "border-line bg-card hover:border-brand"}`}>{lbl}</button>
+                  <button key={d.date} type="button" onClick={() => setDate(d.date)}
+                    className={`snap-start shrink-0 w-[68px] py-2.5 rounded-2xl border-2 text-center transition ${on ? "bg-brand text-white border-brand shadow-lg shadow-brand/25" : "border-line bg-card hover:border-brand/50"}`}>
+                    <div className={`text-[11px] font-semibold ${on ? "text-white/85" : "text-muted"}`}>{dayLabel(d)}</div>
+                    <div className="font-display font-bold text-2xl leading-tight">{d.day}</div>
+                    <div className={`text-[10px] font-semibold ${on ? "text-white/80" : "text-muted"}`}>{MONTHS[lang][d.month]}</div>
+                  </button>
                 );
               })}
             </div>
-          )}
-        </section>
+
+            <div className="mt-4">
+              {loadingSlots || !slots ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-11 rounded-xl bg-black/5 dark:bg-white/5 animate-pulse" />)}</div>
+              ) : slots.closed ? (
+                <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-6 text-center text-muted">🔒 {t("closed_day")}</div>
+              ) : slots.slots.length === 0 ? (
+                <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-6 text-center text-muted">😕 {t("no_slots")}</div>
+              ) : (
+                <div className="space-y-4">
+                  {groups.map((g) => (
+                    <div key={g.key}>
+                      <div className="text-xs font-bold uppercase tracking-wide text-muted mb-2">{g.label}</div>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {g.items.map((s) => (
+                          <button key={s} type="button" onClick={() => pickTime(s)}
+                            className={`h-11 rounded-xl border-2 text-sm font-bold transition ${time === s ? "bg-brand text-white border-brand" : "border-line bg-card hover:border-brand/60"}`}>
+                            {to12(s)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Step>
+        </div>
       )}
 
       {service && time && (
-        <section className="card p-5 space-y-4">
-          <div>
-            <h2 className="font-display font-bold text-lg">{t("your_details")}</h2>
-            <p className="text-sm text-muted">{t("no_login")}</p>
+        <div ref={detailsRef} className="scroll-mt-4">
+          <Step n={n++} title={t("your_details")} done={ready}>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="cn">{t("your_name")}</label>
+                <input id="cn" className="input" required minLength={2} maxLength={60} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+              </div>
+              <div>
+                <label className="label" htmlFor="cp">{t("your_phone")}</label>
+                <input id="cp" className="input" required type="tel" inputMode="tel" placeholder={`+${dial} …`} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="cemail">{t("your_email")}</label>
+                <input id="cemail" className="input" type="email" inputMode="email" maxLength={120} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+                <p className="text-xs text-muted mt-1">{t("email_hint")}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="cnote">{t("note")}</label>
+                <textarea id="cnote" rows={2} className="input h-auto py-3" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
+              </div>
+            </div>
+            {/* honeypot: hidden from people, bots fill it */}
+            <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" value={hp} onChange={(e) => setHp(e.target.value)} />
+          </Step>
+        </div>
+      )}
+
+      {/* sticky summary */}
+      {service && (
+        <div className="fixed bottom-0 inset-x-0 z-40 p-3 sm:p-4 pointer-events-none">
+          <div className="pointer-events-auto mx-auto max-w-2xl rounded-2xl bg-ink/95 dark:bg-card/95 text-white backdrop-blur-xl shadow-2xl ring-1 ring-white/10 p-3 pl-5 flex items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold truncate">{service.name} · {money(service.price)}</div>
+              <div className="text-xs text-white/70 truncate">
+                {time ? `${dayLabel(chosenDay)}, ${chosenDay.day} ${MONTHS[lang][chosenDay.month]} · ${to12(time)}` : si ? "වෙලාවක් තෝරන්න" : "Pick a time"}
+                {staffId ? ` · ${staff.find((s) => s.id === staffId)?.name}` : ""}
+              </div>
+              {error && <div className="text-xs text-red-300 mt-0.5">{error}</div>}
+            </div>
+            <button type="submit" disabled={!time || booking}
+              className="shrink-0 h-12 px-5 rounded-xl bg-brand font-bold text-sm transition hover:brightness-110 disabled:opacity-40">
+              {booking ? "…" : ready ? (si ? "Confirm ✓" : "Confirm ✓") : (si ? "ඊළඟ →" : "Next →")}
+            </button>
           </div>
-          <div>
-            <label className="label" htmlFor="cn">{t("your_name")}</label>
-            <input id="cn" className="input" required minLength={2} maxLength={60} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-          </div>
-          <div>
-            <label className="label" htmlFor="cp">{t("your_phone")}</label>
-            <input id="cp" className="input" required type="tel" inputMode="tel" placeholder={`+${dial} …`} value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
-          </div>
-          <div>
-            <label className="label" htmlFor="cemail">{t("your_email")}</label>
-            <input id="cemail" className="input" type="email" inputMode="email" maxLength={120} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-            <p className="text-xs text-muted mt-1">{t("email_hint")}</p>
-          </div>
-          <div>
-            <label className="label" htmlFor="cnote">{t("note")}</label>
-            <input id="cnote" className="input" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
-          {/* honeypot: hidden from people, bots fill it */}
-          <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" value={hp} onChange={(e) => setHp(e.target.value)} />
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button className="btn w-full" disabled={booking}>{booking ? "…" : `${t("confirm_booking")} · ${money(service.price)}`}</button>
-        </section>
+        </div>
       )}
     </form>
   );
