@@ -14,15 +14,17 @@ export async function NotifyStatus({ lang }: { lang: "si" | "en" }) {
   const dbOk = !error;
   // does the "service role" key really bypass RLS? (anon key pasted by mistake = sees 0 rows)
   let adminOk = false;
+  let adminWhy = "";
   if (admin) {
     const r = await admin.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("owner_id", user.id);
     adminOk = !r.error && (r.count ?? 0) === (count ?? 0);
+    adminWhy = r.error?.message.includes("permission denied") ? " — run migration 004 (service_role grants)" : " — wrong key (anon / publishable?)";
   }
   const version = (process.env.VERCEL_GIT_COMMIT_SHA ?? "local").slice(0, 7);
   const rows: [boolean, string][] = [
     [dbOk, si ? "Database (003 migration)" : "Database (003 migration)"],
     [vapid, (si ? "Push keys (VAPID) Vercel එකේ" : "Push keys (VAPID) in Vercel") + (vc.ok ? "" : ` — ${vc.reason}`)],
-    [!!admin && adminOk, (si ? "SUPABASE_SERVICE_ROLE_KEY Vercel එකේ" : "SUPABASE_SERVICE_ROLE_KEY in Vercel") + (!admin ? "" : adminOk ? "" : " — wrong key (anon / publishable?)")],
+    [!!admin && adminOk, (si ? "SUPABASE_SERVICE_ROLE_KEY Vercel එකේ" : "SUPABASE_SERVICE_ROLE_KEY in Vercel") + (!admin || adminOk ? "" : adminWhy)],
     [(count ?? 0) > 0, si ? `On කරපු devices: ${count ?? 0}` : `Devices turned on: ${count ?? 0}`],
   ];
   return (
