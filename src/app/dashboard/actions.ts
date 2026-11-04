@@ -6,11 +6,23 @@ import { requireBusiness } from "@/lib/business";
 import { createClient } from "@/lib/supabase/server";
 import { COUNTRIES, getCountry } from "@/lib/countries";
 import { isValidTz } from "@/lib/time";
+import { after } from "next/server";
+import { notifyBooking } from "@/lib/notify";
 
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/");
+}
+
+export async function decideChange(id: string, approve: boolean) {
+  const { supabase, business } = await requireBusiness();
+  const { data: b } = await supabase.from("bookings").select("token, starts_at").eq("id", id).eq("business_id", business.id).maybeSingle();
+  if (!b) return;
+  const { data: result } = await supabase.rpc("decide_reschedule", { p_booking_id: id, p_approve: approve });
+  if (result === "approved") after(() => notifyBooking(b.token, "change_approved", b.starts_at));
+  if (result === "declined") after(() => notifyBooking(b.token, "change_declined"));
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function setBookingStatus(id: string, status: "completed" | "no_show" | "cancelled") {

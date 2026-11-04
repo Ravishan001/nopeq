@@ -5,6 +5,7 @@ import { useLang, useT } from "@/components/I18nProvider";
 import { WEEKDAYS } from "@/lib/i18n";
 import { book, getSlots } from "./actions";
 import { formatMoney } from "@/lib/countries";
+import type { Slot } from "@/lib/slots";
 import { todayIn, weekdayOf } from "@/lib/time";
 
 type Service = { id: string; name: string; section: string | null; price: number; duration_min: number };
@@ -54,7 +55,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
   const [staffId, setStaffId] = useState<string | null>(null);
   const [staffPicked, setStaffPicked] = useState(false);
   const [date, setDate] = useState(days[0].date);
-  const [slots, setSlots] = useState<{ closed: boolean; slots: string[] } | null>(null);
+  const [slots, setSlots] = useState<{ closed: boolean; slots: Slot[] } | null>(null);
   const [time, setTime] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -82,13 +83,13 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
     ? services.filter((s) => s.section === section || !sectionList.includes(s.section ?? ""))
     : services;
   const groups = useMemo(() => {
-    const g: { key: string; label: string; items: string[] }[] = [
+    const g: { key: string; label: string; items: Slot[] }[] = [
       { key: "m", label: si ? "🌅 උදේ" : "🌅 Morning", items: [] },
       { key: "a", label: si ? "☀️ දවල්" : "☀️ Afternoon", items: [] },
       { key: "e", label: si ? "🌙 හවස" : "🌙 Evening", items: [] },
     ];
     for (const s of slots?.slots ?? []) {
-      const h = Number(s.slice(0, 2));
+      const h = Number(s.t.slice(0, 2));
       (h < 12 ? g[0] : h < 17 ? g[1] : g[2]).items.push(s);
     }
     return g.filter((x) => x.items.length);
@@ -223,7 +224,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-11 rounded-xl bg-black/5 dark:bg-white/5 animate-pulse" />)}</div>
               ) : slots.closed ? (
                 <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-6 text-center text-muted">🔒 {t("closed_day")}</div>
-              ) : slots.slots.length === 0 ? (
+              ) : !slots.slots.some((x) => x.free) ? (
                 <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-6 text-center text-muted">😕 {t("no_slots")}</div>
               ) : (
                 <div className="space-y-4">
@@ -231,11 +232,16 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
                     <div key={g.key}>
                       <div className="text-xs font-bold uppercase tracking-wide text-muted mb-2">{g.label}</div>
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {g.items.map((s) => (
-                          <button key={s} type="button" onClick={() => pickTime(s)}
-                            className={`h-11 rounded-xl border-2 text-sm font-bold transition ${time === s ? "bg-brand text-white border-brand" : "border-line bg-card hover:border-brand/60"}`}>
-                            {to12(s)}
+                        {g.items.map((s) => s.free ? (
+                          <button key={s.t} type="button" onClick={() => pickTime(s.t)}
+                            className={`h-11 rounded-xl border-2 text-sm font-bold transition ${time === s.t ? "bg-brand text-white border-brand" : "border-line bg-card hover:border-brand/60"}`}>
+                            {to12(s.t)}
                           </button>
+                        ) : (
+                          <div key={s.t} aria-disabled title={si ? "Book කරලා" : "Booked"}
+                            className="h-11 rounded-xl border border-dashed border-line flex items-center justify-center text-sm font-medium text-muted/60 line-through decoration-2 select-none">
+                            {to12(s.t)}
+                          </div>
                         ))}
                       </div>
                     </div>

@@ -7,12 +7,12 @@ import { fmtDateTime } from "./time";
 
 type Row = {
   id: string; token: string; status: string; starts_at: string; customer_name: string; customer_phone: string;
-  customer_email: string | null; note: string | null;
+  customer_email: string | null; note: string | null; requested_starts_at: string | null; request_status: string | null;
   services: { name: string; price: number } | null; staff: { name: string } | null; branches: { name: string } | null;
   businesses: { id: string; owner_id: string; name: string; slug: string; logo_url: string | null; country: string; currency: string; timezone: string; notify_email: boolean; notify_push: boolean };
 };
 
-const SELECT = "id, token, status, starts_at, customer_name, customer_phone, customer_email, note, services(name, price), staff(name), branches(name), businesses(id, owner_id, name, slug, logo_url, country, currency, timezone, notify_email, notify_push)";
+const SELECT = "id, token, status, starts_at, requested_starts_at, request_status, customer_name, customer_phone, customer_email, note, services(name, price), staff(name), branches(name), businesses(id, owner_id, name, slug, logo_url, country, currency, timezone, notify_email, notify_push)";
 const site = () => (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
 
 function words(lk: boolean) {
@@ -52,47 +52,71 @@ async function ownerEmail(admin: NonNullable<ReturnType<typeof adminClient>>, ow
 const titleCase = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase().replace(/(^|[\s\-'])(\p{L})/gu, (_, p, c) => p + c.toUpperCase());
 
 /** Clean, scannable phone notification — always in English so it reads the same on every phone. */
-function pushMessage(b: Row, kind: "new" | "cancelled") {
+export type NotifyKind = "new" | "cancelled" | "change_request" | "change_approved" | "change_declined";
+
+function pushMessage(b: Row, kind: NotifyKind, fromIso?: string) {
   const biz = b.businesses;
-  const d = new Date(b.starts_at);
-  const day = new Intl.DateTimeFormat("en-GB", { timeZone: biz.timezone, weekday: "short", day: "numeric", month: "short" }).format(d);
-  const time = new Intl.DateTimeFormat("en-US", { timeZone: biz.timezone, hour: "numeric", minute: "2-digit" }).format(d);
+  const when = (iso: string) => {
+    const d = new Date(iso);
+    const day = new Intl.DateTimeFormat("en-GB", { timeZone: biz.timezone, weekday: "short", day: "numeric", month: "short" }).format(d);
+    const time = new Intl.DateTimeFormat("en-US", { timeZone: biz.timezone, hour: "numeric", minute: "2-digit" }).format(d);
+    return `${day} at ${time}`;
+  };
   const name = titleCase(b.customer_name);
   const service = b.services ? `${b.services.name} · ${formatMoney(Number(b.services.price), biz.currency)}` : "Booking";
   const who = [b.staff && `with ${b.staff.name}`, b.branches?.name].filter(Boolean).join(" · ");
+  const head: Record<NotifyKind, string> = {
+    new: `✅ New booking · ${name}`,
+    cancelled: `❌ Cancelled · ${name}`,
+    change_request: `🔁 Time change request · ${name}`,
+    change_approved: `📅 Rescheduled · ${name}`,
+    change_declined: `↩️ Change declined · ${name}`,
+  };
+  const lines =
+    kind === "change_request" && b.requested_starts_at
+      ? [`Wants ${when(b.requested_starts_at)}`, `Now ${when(b.starts_at)}`, `${service} — tap to approve`]
+      : kind === "change_approved" && fromIso
+        ? [`${when(b.starts_at)}  (was ${when(fromIso)})`, service, who]
+        : [service, when(b.starts_at), who];
   return {
-    title: kind === "new" ? `New booking · ${name}` : `Cancelled · ${name}`,
-    body: [service, `${day} at ${time}`, who].filter(Boolean).join("\n"),
+    title: head[kind],
+    body: lines.filter(Boolean).join("\n"),
     url: "/dashboard/bookings",
     tag: `booking-${b.id}`,
     icon: biz.logo_url ?? undefined,
-    actionLabel: "View booking",
+    actionLabel: kind === "change_request" ? "Review" : "View booking",
   };
 }
 
-/** New booking or cancellation → owner (push + email) and, for new bookings, customer confirmation email. */
-export async function notifyBooking(token: string, kind: "new" | "cancelled") {
+/** Booking events → owner (push + email) and, where it matters, the customer (email). */
+export async function notifyBooking(token: string, kind: NotifyKind, fromIso?: string) {
   try {
     const ctx = await load(token);
     if (!ctx) return;
     const { admin, b } = ctx;
     const biz = b.businesses;
     const w = words(biz.country === "LK");
-    const when = fmtDateTime(b.starts_at, biz.country === "LK" ? "si" : "en", biz.timezone);
-    const title = kind === "new" ? w.newT : w.cancelT;
     const dash = `${site()}/dashboard/bookings`;
-
+    const link = `${site()}/b/${b.token}`;
+    const msg = pushMessage(b, kind, fromIso);
     const jobs: Promise<unknown>[] = [];
-    if (biz.notify_push) {
-      jobs.push(pushToOwner(admin, biz.owner_id, pushMessage(b, kind)));
+
+    // owner: everything the customer does
+    if (kind === "new" || kind === "cancelled" || kind === "change_request") {
+      if (biz.notify_push) jobs.push(pushToOwner(admin, biz.owner_id, msg));
+      if (biz.notify_email) {
+        const rows = details(b, w, true);
+        if (kind === "change_request" && b.requested_starts_at) rows.unshift(["Requested", fmtDateTime(b.requested_starts_at, "en", biz.timezone)]);
+        jobs.push(ownerEmail(admin, biz.owner_id).then((to): Promise<boolean> | false =>
+          (to ? sendEmail(to, msg.title, emailLayout(msg.title, rows, { label: kind === "change_request" ? "Approve / decline" : w.open, url: dash })) : false)));
+      }
     }
-    if (biz.notify_email) {
-      jobs.push(ownerEmail(admin, biz.owner_id).then((to): Promise<boolean> | false =>
-        (to ? sendEmail(to, `${title}: ${b.customer_name} · ${when}`, emailLayout(`${title} · ${biz.name}`, details(b, w, true), { label: w.open, url: dash })) : false)));
-    }
-    if (kind === "new" && b.customer_email) {
-      jobs.push(sendEmail(b.customer_email, `${w.cConfirm} · ${biz.name}`,
-        emailLayout(`${w.cConfirm} · ${biz.name}`, details(b, w, false), { label: w.cView, url: `${site()}/b/${b.token}` }, w.cFooter)));
+    // customer: confirmations and the salon's decision
+    if (b.customer_email && (kind === "new" || kind === "change_approved" || kind === "change_declined")) {
+      const subj = kind === "new" ? w.cConfirm : kind === "change_approved" ? "Your booking time was changed ✅" : "Your time change request was declined";
+      const extra = kind === "change_declined" ? "Your original booking time is still confirmed." : undefined;
+      jobs.push(sendEmail(b.customer_email, `${subj} · ${biz.name}`,
+        emailLayout(`${subj} · ${biz.name}`, details(b, w, false), { label: w.cView, url: link }, extra ? `${extra} ${w.cFooter}` : w.cFooter)));
     }
     await Promise.all(jobs);
   } catch (e) {

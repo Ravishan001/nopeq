@@ -35,10 +35,12 @@ export function dayRange(date: string, tz: string) {
   return { from: from.toISOString(), to: new Date(from.getTime() + 86400000 - 1).toISOString() };
 }
 
-export function fmtDateTime(iso: string, lang: "si" | "en", tz: string) {
-  return new Intl.DateTimeFormat(lang === "si" ? "si-LK" : "en-GB", {
-    timeZone: tz, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true,
-  }).format(new Date(iso));
+/** Short, clear English date + time, e.g. "Thu, 5 Nov · 12:30 PM" (same for every language/phone). */
+export function fmtDateTime(iso: string, _lang: "si" | "en", tz: string) {
+  const d = new Date(iso);
+  const day = new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "short", day: "numeric", month: "short" }).format(d);
+  const time = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(d);
+  return `${day} · ${time}`;
 }
 
 export function isValidTz(tz: string) {

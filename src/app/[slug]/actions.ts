@@ -4,13 +4,13 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { notifyBooking } from "@/lib/notify";
 import { getCountry, normalizePhone } from "@/lib/countries";
-import { freeSlots, type Busy } from "@/lib/slots";
+import { freeSlots, type Busy, type Slot } from "@/lib/slots";
 import { dayRange, weekdayOf, zonedToUtc } from "@/lib/time";
 
 const uuid = z.string().uuid();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-export async function getSlots(businessId: string, day: string, serviceId: string, staffId: string | null) {
+export async function getSlots(businessId: string, day: string, serviceId: string, staffId: string | null): Promise<{ closed: boolean; slots: Slot[] }> {
   if (!uuid.safeParse(businessId).success || !date.safeParse(day).success || !uuid.safeParse(serviceId).success) return { closed: true, slots: [] };
   const supabase = await createClient();
   const { data: biz } = await supabase.from("businesses").select("timezone").eq("id", businessId).maybeSingle();
