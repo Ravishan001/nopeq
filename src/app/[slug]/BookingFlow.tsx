@@ -7,9 +7,12 @@ import { book, getSlots } from "./actions";
 import { formatMoney } from "@/lib/countries";
 import type { Slot } from "@/lib/slots";
 import { todayIn, weekdayOf } from "@/lib/time";
+import { PhotoPicker } from "@/components/PhotoPicker";
 
-type Service = { id: string; name: string; section: string | null; price: number; duration_min: number };
+type Service = { id: string; name: string; section: string | null; price: number; duration_min: number; description?: string | null };
 type Named = { id: string; name: string };
+type Staff = Named & { specialty?: string | null; portfolio?: string[] };
+export type Extras = { refs: boolean; placement: boolean; staffWord: string | null; deposit: number; prepNote: string | null };
 
 const MONTHS = { si: ["ජන", "පෙබ", "මාර්", "අප්‍රේ", "මැයි", "ජූනි", "ජූලි", "අගෝ", "සැප්", "ඔක්", "නොවැ", "දෙසැ"], en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] };
 const AVATAR = ["#F0521F", "#7C3AED", "#0EA5E9", "#16A34A", "#DB2777", "#CA8A04", "#0D9488"];
@@ -38,9 +41,13 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
   );
 }
 
-export function BookingFlow({ businessId, sections, services, staff, branches, currency, timezone, dial }: {
-  businessId: string; currency: string; timezone: string; dial: string; sections: string[]; services: Service[]; staff: Named[]; branches: Named[];
+export function BookingFlow({ businessId, sections, services, staff, branches, currency, timezone, dial, extras }: {
+  businessId: string; currency: string; timezone: string; dial: string; sections: string[]; services: Service[]; staff: Staff[]; branches: Named[]; extras?: Extras;
 }) {
+  const ex: Extras = extras ?? { refs: false, placement: false, staffWord: null, deposit: 0, prepNote: null };
+  const [refs, setRefs] = useState<string[]>([]);
+  const [placement, setPlacement] = useState("");
+  const [zoom, setZoom] = useState<string | null>(null);
   const t = useT();
   const lang = useLang();
   const si = lang === "si";
@@ -121,7 +128,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
     setError(null);
     startBooking(async () => {
       let res: { token?: string; error?: string };
-      try { res = await book({ businessId, branchId: branch, serviceId: service.id, staffId, date, time, name, phone, note, email, website: hp }); }
+      try { res = await book({ businessId, branchId: branch, serviceId: service.id, staffId, date, time, name, phone, note, email, website: hp, refs, placement }); }
       catch { res = { error: "generic" }; }
       if (res.token) router.push(`/b/${res.token}?new=1`);
       else {
@@ -165,14 +172,17 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
               <button key={s.id} type="button" onClick={() => pickService(s)}
                 className={`group text-left rounded-2xl border-2 p-4 transition ${on ? "border-brand bg-soft" : "border-line bg-card hover:border-brand/50 hover:-translate-y-0.5"}`}>
                 <div className="flex items-start justify-between gap-3">
-                  <span className="font-semibold leading-snug">{s.name}</span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold leading-snug">{s.name}</span>
+                    {s.description && <span className="block text-xs text-muted mt-0.5">{s.description}</span>}
+                  </span>
                   <span className={`size-5 shrink-0 rounded-full border-2 flex items-center justify-center ${on ? "border-brand bg-brand" : "border-line"}`}>
                     {on && <span className="size-2 rounded-full bg-white" />}
                   </span>
                 </div>
                 <div className="flex items-center justify-between mt-3">
-                  <span className="text-xs font-semibold text-muted bg-black/5 dark:bg-white/10 rounded-full px-2.5 py-1">⏱ {s.duration_min} {t("min")}</span>
-                  <span className="font-display font-bold">{money(s.price)}</span>
+                  <span className="text-xs font-semibold text-muted bg-black/5 dark:bg-white/10 rounded-full px-2.5 py-1">⏱ {s.duration_min >= 90 && s.duration_min % 60 === 0 ? `${s.duration_min / 60} h` : `${s.duration_min} ${t("min")}`}</span>
+                  <span className="font-display font-bold">{Number(s.price) === 0 ? (si ? "Free" : "Free") : money(s.price)}</span>
                 </div>
               </button>
             );
@@ -182,7 +192,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
 
       {service && staff.length > 0 && (
         <div ref={staffRef} className="scroll-mt-4">
-        <Step n={n++} title={t("choose_staff")} done={staffPicked}>
+        <Step n={n++} title={ex.staffWord ? (si ? `${ex.staffWord} තෝරන්න` : `Choose your ${ex.staffWord.toLowerCase()}`) : t("choose_staff")} done={staffPicked}>
           <div className="flex gap-3 overflow-x-auto py-2 -mx-1 px-2">
             {[{ id: null as string | null, name: t("any_staff") }, ...staff].map((s, i) => {
               const on = staffId === s.id;
@@ -197,8 +207,29 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
               );
             })}
           </div>
+          {(() => {
+            const st = staff.find((x) => x.id === staffId);
+            if (!staffPicked || !st || (!st.specialty && !st.portfolio?.length)) return null;
+            return (
+              <div className="mt-3 rounded-2xl bg-black/5 dark:bg-white/5 p-3">
+                <div className="text-sm font-semibold">{st.name}{st.specialty ? <span className="text-muted font-normal"> · {st.specialty}</span> : null}</div>
+                {!!st.portfolio?.length && (
+                  <div className="flex gap-2 mt-2 overflow-x-auto">
+                    {st.portfolio.map((u) => (
+                      <button key={u} type="button" onClick={() => setZoom(u)} className="shrink-0 size-20 rounded-xl overflow-hidden bg-black/10"><img src={u} alt="" className="size-full object-cover" /></button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </Step>
         </div>
+      )}
+      {zoom && (
+        <button type="button" onClick={() => setZoom(null)} className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" aria-label="Close">
+          <img src={zoom} alt="" className="max-h-full max-w-full rounded-2xl" />
+        </button>
       )}
 
       {service && (
@@ -275,6 +306,29 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
                 <textarea id="cnote" rows={2} className="input h-auto py-3" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
               </div>
             </div>
+            {(ex.refs || ex.placement) && (
+              <div className="mt-4 space-y-3">
+                {ex.refs && (
+                  <PhotoPicker businessId={businessId} urls={refs} onChange={setRefs} max={3} si={si}
+                    title={si ? "Reference photo දාන්න" : "Add reference photos"} sub={si ? "Photos 3ක් වෙනකම් · optional" : "Up to 3 photos · optional"} />
+                )}
+                {ex.placement && (
+                  <div>
+                    <label className="label" htmlFor="cpl">{si ? "ගහන තැන සහ size එක" : "Placement & size"}</label>
+                    <input id="cpl" className="input" maxLength={100} value={placement} onChange={(e) => setPlacement(e.target.value)} placeholder={si ? "උදා: වම් අත · ~10 cm" : "e.g. left forearm · ~10 cm"} />
+                  </div>
+                )}
+              </div>
+            )}
+            {ex.deposit > 0 && (
+              <div className="mt-4 rounded-2xl border border-brand/30 bg-soft p-3.5 text-sm">
+                💰 <b>{si ? `Confirm කරන්න deposit එක ${money(ex.deposit)}` : `Deposit ${money(ex.deposit)} to confirm`}</b>
+                <div className="text-xs text-muted mt-0.5">{si ? "Final ගාණෙන් අඩු කරනවා. ගෙවන විදිහ shop එකෙන් කියයි." : "Taken off the final price. The shop will tell you how to pay."}</div>
+              </div>
+            )}
+            {ex.prepNote && (
+              <div className="mt-3 rounded-2xl bg-black/5 dark:bg-white/5 p-3.5 text-sm">🧴 <b>{si ? "එන්න කලින්:" : "Before you come:"}</b> {ex.prepNote}</div>
+            )}
             {/* honeypot: hidden from people, bots fill it */}
             <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" value={hp} onChange={(e) => setHp(e.target.value)} />
           </Step>

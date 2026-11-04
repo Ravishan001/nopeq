@@ -8,30 +8,40 @@ import { getT } from "@/lib/lang";
 import { siteUrl } from "@/lib/site";
 import { ampm, minutesIn, todayIn } from "@/lib/time";
 import type { TKey } from "@/lib/i18n";
-import { getBoard } from "./board-actions";
+import { getBoard, type BoardData } from "./board-actions";
+import { OrderCalendar } from "@/components/OrderCalendar";
+import { getDayOrders, getMonth, getOrderStats } from "./order-actions";
+import { getKind } from "@/lib/templates";
 
 export const metadata = { title: "Dashboard" };
 
-export default async function Dashboard({ searchParams }: { searchParams: Promise<{ welcome?: string; debug?: string }> }) {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ welcome?: string; debug?: string; day?: string }> }) {
   const { supabase, business } = await requireBusiness();
   const { t, lang } = await getT();
   const si = lang === "si";
-  const { welcome, debug } = await searchParams;
+  const { welcome, debug, day: dayParam } = await searchParams;
+  const orders = business.mode === "orders";
+  const kind = getKind(business.type);
+  const today = todayIn(business.timezone);
+  const focusDay = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : today;
 
-  const [svc, stf, hrs, board] = await Promise.all([
-    supabase.from("services").select("id, name, duration_min, price").eq("business_id", business.id).eq("active", true).order("sort"),
+  const [svc, stf, hrs, board, od] = await Promise.all([
+    supabase.from("services").select("*").eq("business_id", business.id).eq("active", true).order("sort"),
     supabase.from("staff").select("id, name").eq("business_id", business.id).eq("active", true).order("created_at"),
-    supabase.from("business_hours").select("weekday", { count: "exact", head: true }).eq("business_id", business.id).eq("is_open", true),
-    getBoard(todayIn(business.timezone)),
+    supabase.from("business_hours").select("weekday").eq("business_id", business.id).eq("is_open", true),
+    orders ? Promise.resolve<BoardData>({ date: today, open: null, close: null, items: [] }) : getBoard(today),
+    orders ? Promise.all([getMonth(focusDay.slice(0, 7)), getDayOrders(focusDay), getOrderStats()]) : Promise.resolve(null),
   ]);
-  const services = (svc.data ?? []).map((s) => ({ ...s, price: Number(s.price) }));
+  const services = ((svc.data ?? []) as { id: string; name: string; duration_min: number; price: number; options?: unknown }[])
+    .map((s) => ({ id: s.id, name: s.name, duration_min: s.duration_min, price: Number(s.price), options: s.options ?? {} }));
+  const openDays = (hrs.data ?? []).map((h) => h.weekday as number);
   const staff = stf.data ?? [];
 
   const checklist: { key: TKey; done: boolean; href: string; locked?: boolean }[] = [
     { key: "cl_name", done: true, href: "/dashboard/settings" },
     { key: "cl_services", done: services.length > 0, href: "/dashboard/settings?tab=services" },
-    { key: "cl_staff", done: staff.length > 0, href: "/dashboard/settings?tab=staff" },
-    { key: "cl_hours", done: (hrs.count ?? 0) > 0, href: "/dashboard/settings?tab=hours" },
+    ...(orders ? [] : [{ key: "cl_staff" as TKey, done: staff.length > 0, href: "/dashboard/settings?tab=staff" }]),
+    { key: "cl_hours", done: openDays.length > 0, href: "/dashboard/settings?tab=hours" },
     { key: "cl_logo", done: !!business.logo_url, href: "/dashboard/settings#media" },
     { key: "cl_cover", done: !!business.cover_url, href: "/dashboard/settings#media" },
     { key: "cl_location", done: !!(business.address || business.maps_url), href: "/dashboard/settings#contact" },
@@ -55,7 +65,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     <div className="card p-3 sm:p-4">
       <div className="flex items-center gap-3">
         <div className="size-12 rounded-2xl bg-black/5 dark:bg-white/10 overflow-hidden flex items-center justify-center text-xl shrink-0">
-          {business.logo_url ? <img src={business.logo_url} alt="" className="size-full object-cover" /> : "✂️"}
+          {business.logo_url ? <img src={business.logo_url} alt="" className="size-full object-cover" /> : kind.icon}
         </div>
         <div className="min-w-0 flex-1">
           <div className="font-display font-bold leading-tight truncate">{business.name}</div>
@@ -104,8 +114,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         )}
         <div className="lg:hidden">{BizCard}</div>
         <div>
-          <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted mb-2 px-1">{si ? "අද slots" : "Today's slots"}</h2>
-          <SlotBoard initial={board} staff={staff} services={services} timezone={business.timezone} currency={business.currency} />
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted mb-2 px-1">{orders ? (si ? "Orders calendar" : "Orders calendar") : si ? "අද slots" : "Today's slots"}</h2>
+          {orders && od ? (
+            <OrderCalendar initialMonth={od[0]} initialDay={focusDay} initialOrders={od[1]} initialStats={od[2]} products={services}
+              dailyLimit={business.daily_limit ?? 6} openDays={openDays} timezone={business.timezone} currency={business.currency}
+              icon={kind.icon} bizName={business.name} delivery={business.delivery_fee != null} />
+          ) : (
+            <SlotBoard initial={board} staff={staff} services={services} timezone={business.timezone} currency={business.currency} />
+          )}
         </div>
         <div className="lg:hidden space-y-3">
           <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted mt-6 px-1">{si ? "Share සහ alerts" : "Share & alerts"}</h2>
@@ -118,7 +134,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         {BizCard}
         <QrCard url={url} name={business.name} />
         {Alerts}
-        <div className="card p-4">
+        {!orders && <div className="card p-4">
           <div className="font-display font-bold">{si ? "ඊළඟට" : "Next up"}</div>
           {next.length ? (
             <ul className="mt-2 space-y-2 text-sm">
@@ -132,7 +148,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             </ul>
           ) : <p className="text-sm text-muted mt-1">{si ? "අද තව bookings නෑ" : "Nothing else today"}</p>}
           <Link href="/dashboard/bookings" className="btn-ghost w-full h-10 text-sm mt-3">{si ? "ඔක්කොම bookings →" : "All bookings →"}</Link>
-        </div>
+        </div>}
       </aside>
     </div>
   );

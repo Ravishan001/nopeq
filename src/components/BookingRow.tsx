@@ -7,10 +7,13 @@ export type BookingRowData = {
   id: string; starts_at: string; ends_at?: string; status: string; source?: string;
   request_status?: string | null; requested_starts_at?: string | null;
   customer_name: string; customer_phone: string | null; note: string | null;
+  ref_urls?: string[] | null; placement?: string | null;
   services: { name: string; price: number } | null; staff: { name: string } | null; branches: { name: string } | null;
 };
 
 export const BOOKING_SELECT = "id, starts_at, ends_at, status, source, request_status, requested_starts_at, customer_name, customer_phone, note, services(name, price), staff:staff!bookings_staff_id_fkey(name), branches(name)";
+/** + tattoo reference photos (migration 007) */
+export const BOOKING_SELECT_V7 = `${BOOKING_SELECT}, ref_urls, placement`;
 /** Same list without the newer columns (works before migrations 005/006 are run). */
 export const BOOKING_SELECT_LEGACY = "id, starts_at, ends_at, status, customer_name, customer_phone, note, services(name, price), staff:staff!bookings_staff_id_fkey(name), branches(name)";
 
@@ -72,6 +75,12 @@ export function BookingRow({ b, lang, t, tz, currency, last }: { b: BookingRowDa
         </div>
 
         {b.note && <div className="text-sm text-muted mt-2.5 rounded-xl bg-black/[.04] dark:bg-white/[.05] px-3 py-2">📝 {b.note}</div>}
+        {(b.placement || !!b.ref_urls?.length) && (
+          <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+            {b.ref_urls?.map((u) => <a key={u} href={u} target="_blank" rel="noopener noreferrer" className="size-14 rounded-xl overflow-hidden bg-black/10 block"><img src={u} alt="" className="size-full object-cover" /></a>)}
+            {b.placement && <span className="text-sm text-muted">📍 {b.placement}</span>}
+          </div>
+        )}
 
         {pending ? (
           <>

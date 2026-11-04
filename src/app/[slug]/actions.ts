@@ -6,6 +6,8 @@ import { notifyBooking } from "@/lib/notify";
 import { getCountry, normalizePhone } from "@/lib/countries";
 import { freeSlots, type Busy, type Slot } from "@/lib/slots";
 import { dayRange, weekdayOf, zonedToUtc } from "@/lib/time";
+import { adminClient } from "@/lib/supabase/admin";
+import { isOwnRef } from "./upload-action";
 
 const uuid = z.string().uuid();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -44,6 +46,8 @@ const bookingSchema = z.object({
   note: z.string().trim().max(300).optional(),
   email: z.string().trim().max(120).email().or(z.literal("")).optional(),
   website: z.string().max(0).optional(), // honeypot: bots fill this, humans don't see it
+  refs: z.array(z.string().max(400)).max(3).optional(),
+  placement: z.string().trim().max(100).optional(),
 });
 
 export async function book(input: z.infer<typeof bookingSchema>): Promise<{ token?: string; error?: string }> {
@@ -64,6 +68,16 @@ export async function book(input: z.infer<typeof bookingSchema>): Promise<{ toke
     return { error: m.includes("slot_taken") ? "slot_taken" : m.includes("too_many") ? "too_many" : "generic" };
   }
   const token = data as string;
+  // tattoo / nails: reference photos + placement (only links to our own upload folder)
+  const refs = [];
+  for (const u of d.refs ?? []) if (await isOwnRef(u, d.businessId)) refs.push(u);
+  if (refs.length || d.placement) {
+    const admin = adminClient();
+    if (admin) {
+      const { error: e2 } = await admin.from("bookings").update({ ref_urls: refs, placement: d.placement || null }).eq("token", token);
+      if (e2) console.error("save refs", e2.message);
+    }
+  }
   after(() => notifyBooking(token, "new"));
   return { token };
 }

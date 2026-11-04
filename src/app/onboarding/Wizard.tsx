@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLang, useT } from "@/components/I18nProvider";
 import { WEEKDAYS } from "@/lib/i18n";
 import { COUNTRIES, currencySymbol, flag, getCountry, localPrice } from "@/lib/countries";
-import { BUSINESS_TYPES, SALON_SECTIONS, SALON_SERVICES, slugify, type TemplateService } from "@/lib/templates";
+import { KINDS, getKind, slugify, type BusinessKind, type TemplateService } from "@/lib/templates";
 import { checkSlug, createBusiness } from "./actions";
 
 type Step = "type" | "how" | "details" | "services" | "staff";
@@ -32,12 +32,28 @@ export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: strin
   const [slugOk, setSlugOk] = useState<boolean | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [branchInput, setBranchInput] = useState("");
-  const [sections, setSections] = useState<string[]>(["Gents", "Ladies"]);
+  const [kind, setKind] = useState<BusinessKind>(KINDS[0]);
+  const orders = kind.mode === "orders";
+  const [sections, setSections] = useState<string[]>(KINDS[0].defaultSections);
+  const [dailyLimit, setDailyLimit] = useState(6);
+  const [leadDays, setLeadDays] = useState(1);
   const [countryCode, setCountryCode] = useState(detectedCountry);
   const country = getCountry(countryCode);
   const [timezone, setTimezone] = useState(detectedTz);
-  const priced = (code: string) => SALON_SERVICES.map((s) => ({ ...s, price: localPrice(s.price, getCountry(code)) }));
-  const [services, setServices] = useState<TemplateService[]>(() => priced(detectedCountry));
+  const priced = (k: BusinessKind, code: string) => {
+    const c = getCountry(code);
+    return k.services.map((s) => ({
+      ...s, price: localPrice(s.price, c),
+      options: s.options ? { ...s.options, sizes: s.options.sizes?.map((z) => ({ ...z, price: localPrice(z.price, c) })) } : undefined,
+    }));
+  };
+  const [services, setServices] = useState<TemplateService[]>(() => priced(KINDS[0], detectedCountry));
+  function pickKind(id: string) {
+    const k = getKind(id);
+    setKind(k);
+    setSections(k.defaultSections);
+    setServices(priced(k, countryCode));
+  }
   const zones = useMemo(() => {
     try { return Intl.supportedValuesOf("timeZone"); } catch { return [country.tz]; }
   }, [country.tz]);
@@ -49,8 +65,8 @@ export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: strin
     setTimezone(code === detectedCountry ? detectedTz : c.tz);
     // re-price only the template services the owner hasn't renamed
     setServices((prev) => prev.map((s) => {
-      const tpl = SALON_SERVICES.find((x) => x.name === s.name && x.section === s.section);
-      return tpl ? { ...s, price: localPrice(tpl.price, c) } : s;
+      const tpl = kind.services.find((x) => x.name === s.name && x.section === s.section);
+      return tpl ? { ...s, price: localPrice(tpl.price, c), options: tpl.options ? { ...tpl.options, sizes: tpl.options.sizes?.map((z) => ({ ...z, price: localPrice(z.price, c) })) } : undefined } : s;
     }));
   }
   const [staff, setStaff] = useState<string[]>([]);
@@ -94,9 +110,15 @@ export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: strin
     const chosen = visibleServices.filter((s) => s.on && s.name.trim());
     start(async () => {
       const res = await createBusiness({
-        type: "salon", country: countryCode, timezone, name, slug, sections, branches,
-        services: chosen.map((s) => ({ section: s.section, name: s.name.trim(), price: Math.max(0, Number(s.price) || 0), duration: Math.round(s.duration) || 30 })),
-        staff, days, open, close,
+        type: kind.id, country: countryCode, timezone, name, slug, sections, branches,
+        services: chosen.map((s) => {
+          const price = Math.max(0, Number(s.price) || 0);
+          // a renamed/repriced product keeps its sizes, but the first size follows the edited price
+          const sz = s.options?.sizes;
+          return { section: s.section, name: s.name.trim(), price, duration: Math.round(s.duration) || 30, description: s.description,
+            options: s.options ? { ...s.options, sizes: sz?.length ? sz.map((z, k) => (k === 0 ? { ...z, price } : z)) : undefined } : undefined };
+        }),
+        staff: orders ? [] : staff, days, open, close, dailyLimit, leadDays,
       });
       if (res?.error === "exists") window.location.href = "/dashboard";
       else if (res?.error) setError(res.error === "slug" ? "Link එක දැනටමත් පාවිච්චි වෙනවා / Link already taken" : `${t("err_generic")} (${res.error})`);
@@ -113,20 +135,32 @@ export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: strin
         <>
           <p className="text-sm text-muted">{t("ob_step")} 1 / 2</p>
           <h1 className="font-display font-bold text-2xl mt-1">{t("ob_type_q")}</h1>
-          <div className="grid grid-cols-2 gap-3 mt-6">
-            {BUSINESS_TYPES.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                disabled={!b.ready}
-                onClick={() => setStep("how")}
-                className={`card p-4 text-left transition ${b.ready ? "hover:border-brand hover:bg-soft" : "opacity-50 cursor-not-allowed"}`}
-              >
-                <div className="text-2xl">{b.icon}</div>
-                <div className="font-semibold mt-2">{b[lang]}</div>
-                {!b.ready && <div className="text-xs text-muted mt-1">{t("coming_soon")}</div>}
-              </button>
-            ))}
+          <p className="text-sm text-muted mt-1">{lang === "si" ? "ඔයාට ගැලපෙන booking විදිහ අපි set කරනවා" : "We'll set up the right booking style for you"}</p>
+          {(["slots", "orders"] as const).map((m) => (
+            <div key={m} className="mt-6">
+              <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted mb-2.5">
+                <span>{m === "slots" ? (lang === "si" ? "⏰ Appointments · වෙලාවට" : "⏰ Appointments · time slots") : (lang === "si" ? "📅 Orders · දවසට" : "📅 Orders · pick a day")}</span>
+                <span className="normal-case tracking-normal text-brand">{m === "slots" ? (lang === "si" ? "Slot board" : "Slot board") : (lang === "si" ? "Calendar view" : "Calendar view")}</span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {KINDS.filter((k) => k.mode === m).map((k) => (
+                  <button key={k.id} type="button" onClick={() => pickKind(k.id)} aria-pressed={kind.id === k.id}
+                    className={`rounded-2xl border-2 px-1 py-3 text-center transition ${kind.id === k.id ? "border-brand bg-soft" : "border-line bg-card hover:border-brand/50"}`}>
+                    <div className="text-2xl">{k.icon}</div>
+                    <div className="text-xs font-bold mt-1 leading-tight">{k[lang]}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="mt-5 rounded-2xl border border-brand/30 bg-soft p-3.5 text-sm">
+            <b>{kind.icon} {kind[lang]}</b> → {kind.hint?.[lang] ?? (orders
+              ? (lang === "si" ? "Customer දවසක් තෝරලා order කරනවා. Dashboard එකේ calendar එකක් එනවා." : "Customers order for a day. Your dashboard shows a calendar.")
+              : (lang === "si" ? "Customer වෙලාවක් තෝරලා book කරනවා. Dashboard එකේ slot board එකක් එනවා." : "Customers book a time. Your dashboard shows a slot board."))}
+            <span className="text-muted"> {lang === "si" ? "පස්සේ Settings වලින් වෙනස් කරන්න පුළුවන්." : "You can change this later in Settings."}</span>
+          </div>
+          <div className="flex justify-end mt-6">
+            <button type="button" className="btn" onClick={() => setStep("how")}>{t("continue")} →</button>
           </div>
         </>
       )}
@@ -207,7 +241,7 @@ export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: strin
             <div>
               <span className="label">{t("sections")}</span>
               <div className="flex flex-wrap gap-2">
-                {SALON_SECTIONS.map((s) => (
+                {kind.sections.map((s) => (
                   <button key={s} type="button" className={`chip ${sections.includes(s) ? "chip-on" : ""}`} onClick={() => setSections(toggle(sections, s))}>{s}</button>
                 ))}
               </div>
@@ -233,13 +267,18 @@ export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: strin
                   {visibleServices.filter((s) => s.section === sec).map((s) => (
                     <div key={s.i} className={`card p-3 flex items-center gap-3 ${s.on ? "border-brand bg-soft" : ""}`}>
                       <input type="checkbox" checked={s.on} onChange={(e) => updateService(s.i, { on: e.target.checked })} className="size-5 accent-[#F0521F]" aria-label={s.name} />
-                      <input className="flex-1 bg-transparent font-semibold outline-none min-w-0" value={s.name} onChange={(e) => updateService(s.i, { name: e.target.value })} />
+                      <div className="flex-1 min-w-0">
+                        <input className="w-full bg-transparent font-semibold outline-none" value={s.name} onChange={(e) => updateService(s.i, { name: e.target.value })} />
+                        {(s.options?.sizes?.length || s.options?.flavours?.length || s.description) ? (
+                          <div className="text-xs text-muted truncate">{[s.description, s.options?.sizes?.map((z) => z.label).join(" / "), s.options?.flavours?.join(", ")].filter(Boolean).join(" · ")}</div>
+                        ) : null}
+                      </div>
                       <div className="flex items-center gap-1 text-sm">
                         <span className="text-muted">{sym}</span>
                         <input type="number" min={0} step="any" className="w-24 h-9 px-2 rounded-lg bg-card border border-line text-right font-semibold" value={s.price}
                           onChange={(e) => updateService(s.i, { price: Number(e.target.value) })} />
                       </div>
-                      <div className="hidden sm:flex items-center gap-1 text-sm">
+                      <div className={`${orders ? "hidden" : "hidden sm:flex"} items-center gap-1 text-sm`}>
                         <input type="number" min={5} step={5} className="w-16 h-9 px-2 rounded-lg bg-card border border-line text-right" value={s.duration}
                           onChange={(e) => updateService(s.i, { duration: Number(e.target.value) })} />
                         <span className="text-muted">{t("min")}</span>
@@ -264,10 +303,23 @@ export function Wizard({ detectedCountry, detectedTz }: { detectedCountry: strin
       {step === "staff" && (
         <>
           <Progress n={3} />
-          <h1 className="font-display font-bold text-2xl">{t("ob_staff_hours")}</h1>
+          <h1 className="font-display font-bold text-2xl">{orders ? (lang === "si" ? "Order දවස් සහ limit" : "Order days & limits") : t("ob_staff_hours")}</h1>
           <div className="space-y-6 mt-6">
-            <div>
-              <span className="label">{t("staff")}</span>
+            {orders && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label" htmlFor="dl">{lang === "si" ? "දවසකට max orders" : "Max orders a day"}</label>
+                  <input id="dl" type="number" min={1} max={500} className="input" value={dailyLimit} onChange={(e) => setDailyLimit(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} />
+                </div>
+                <div>
+                  <label className="label" htmlFor="ld">{lang === "si" ? "කලින් order කරන්න ඕන දවස්" : "Order how many days ahead"}</label>
+                  <input id="ld" type="number" min={0} max={60} className="input" value={leadDays} onChange={(e) => setLeadDays(Math.max(0, Math.min(60, Number(e.target.value) || 0)))} />
+                </div>
+                <p className="text-xs text-muted col-span-2 -mt-1">{lang === "si" ? "දවසක orders limit එක පිරුණම ඒ දවස customer ට වැහෙනවා." : "When a day reaches the limit it closes for customers."}</p>
+              </div>
+            )}
+            <div className={orders ? "hidden" : ""}>
+              <span className="label">{kind.staffWord ? `${kind.staffWord[lang]}s` : t("staff")}</span>
               <div className="flex flex-wrap gap-2">
                 {staff.map((s) => (
                   <button key={s} type="button" className="chip chip-on" onClick={() => setStaff(staff.filter((x) => x !== s))}>{s} ✕</button>

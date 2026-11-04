@@ -1,9 +1,12 @@
 import Link from "next/link";
-import { BOOKING_SELECT, BOOKING_SELECT_LEGACY, BookingRow, type BookingRowData } from "@/components/BookingRow";
+import { BOOKING_SELECT, BOOKING_SELECT_LEGACY, BOOKING_SELECT_V7, BookingRow, type BookingRowData } from "@/components/BookingRow";
 import { requireBusiness } from "@/lib/business";
-import { formatMoney } from "@/lib/countries";
+import { formatMoney, shortMoney } from "@/lib/countries";
 import { getLang, getT } from "@/lib/lang";
 import { dayRange, minutesIn, todayIn } from "@/lib/time";
+import { OrdersList } from "@/components/OrdersList";
+import { getOrderStats, listOrders } from "../order-actions";
+import { getKind } from "@/lib/templates";
 
 export const metadata = { title: "Bookings" };
 
@@ -21,6 +24,27 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
   const tomorrow = todayIn(tz, 1);
   const now = new Date();
 
+  if (business.mode === "orders") {
+    const v = view === "today" || view === "past" ? view : "upcoming";
+    const [list, st] = await Promise.all([listOrders(v), getOrderStats()]);
+    const otabs: [string, string][] = [["upcoming", si ? "ඉදිරියට" : "Upcoming"], ["today", si ? "අද" : "Today"], ["past", si ? "පහු වෙච්ච" : "History"]];
+    return (
+      <div className="max-w-3xl">
+        <div className="flex p-1 rounded-2xl bg-card border border-line">
+          {otabs.map(([k, l]) => (
+            <Link key={k} href={`?view=${k}`} className={`flex-1 h-11 rounded-xl flex items-center justify-center text-sm font-semibold transition ${v === k ? "bg-brand text-white shadow-md shadow-brand/30" : "text-muted hover:text-fg"}`}>{l}</Link>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {[[String(st.toConfirm), si ? "Confirm කරන්න" : "New to confirm"], [String(st.week), si ? "ලබන දවස් 7" : "Next 7 days"], [shortMoney(st.expected, business.currency), si ? "එන්න තියෙන ගාණ" : "Expected"]].map(([a, b]) => (
+            <div key={b} className="card px-3 py-2.5"><div className="font-display font-bold text-lg truncate">{a}</div><div className="text-[11px] text-muted font-semibold">{b}</div></div>
+          ))}
+        </div>
+        <OrdersList orders={list} currency={business.currency} icon={getKind(business.type).icon} bizName={business.name} today={today} />
+      </div>
+    );
+  }
+
   const run = (cols: string) => {
     let q = supabase.from("bookings").select(cols).eq("business_id", business.id);
     if (view === "past") q = q.lt("starts_at", now.toISOString()).order("starts_at", { ascending: false });
@@ -28,7 +52,8 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
     else q = q.gte("ends_at", new Date(now.getTime() - 30 * 60_000).toISOString()).neq("status", "cancelled").order("starts_at");
     return q.limit(200);
   };
-  let { data, error } = await run(BOOKING_SELECT);
+  let { data, error } = await run(BOOKING_SELECT_V7);
+  if (error) ({ data, error } = await run(BOOKING_SELECT));
   if (error) {
     console.error("bookings page:", error.message);
     ({ data, error } = await run(BOOKING_SELECT_LEGACY));

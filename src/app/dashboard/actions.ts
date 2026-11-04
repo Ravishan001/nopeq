@@ -8,6 +8,7 @@ import { COUNTRIES, getCountry } from "@/lib/countries";
 import { isValidTz } from "@/lib/time";
 import { after } from "next/server";
 import { notifyBooking } from "@/lib/notify";
+import { getKind } from "@/lib/templates";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -70,14 +71,62 @@ const serviceSchema = z.object({
   price: z.coerce.number().min(0).max(1_000_000_000).transform((n) => Math.round(n * 100) / 100),
   duration_min: z.coerce.number().int().min(5).max(600),
 });
+/** "1 kg = 3500" per line → [{label, price}] */
+function parseSizes(text: string) {
+  return text.split(/\n|;/).map((l) => l.trim()).filter(Boolean).slice(0, 12).map((l) => {
+    const m = l.match(/^(.{1,40}?)\s*[=:-]\s*([\d.,]+)\s*$/);
+    return m ? { label: m[1].trim(), price: Math.max(0, Number(m[2].replace(/,/g, "")) || 0) } : null;
+  }).filter((x): x is { label: string; price: number } => !!x);
+}
 export async function upsertService(form: FormData) {
   const { supabase, business } = await requireBusiness();
   const id = form.get("id") as string | null;
-  const parsed = serviceSchema.safeParse(Object.fromEntries(form));
+  const raw = Object.fromEntries(form);
+  if (!raw.duration_min) raw.duration_min = "30";
+  const parsed = serviceSchema.safeParse(raw);
   if (!parsed.success) return;
-  if (id) await supabase.from("services").update(parsed.data).eq("id", id).eq("business_id", business.id);
-  else await supabase.from("services").insert({ ...parsed.data, business_id: business.id });
+  const row: Record<string, unknown> = { ...parsed.data };
+  if (form.has("description")) row.description = String(form.get("description") ?? "").trim().slice(0, 120) || null;
+  if (form.has("sizes") || form.has("flavours")) {
+    const sizes = parseSizes(String(form.get("sizes") ?? ""));
+    const flavours = String(form.get("flavours") ?? "").split(",").map((x) => x.trim().slice(0, 40)).filter(Boolean).slice(0, 20);
+    row.options = { ...(sizes.length ? { sizes } : {}), ...(flavours.length ? { flavours } : {}) };
+    if (sizes.length) row.price = Math.min(...sizes.map((x) => x.price)); // "from" price
+  }
+  const save = (r: Record<string, unknown>) => (id
+    ? supabase.from("services").update(r).eq("id", id).eq("business_id", business.id)
+    : supabase.from("services").insert({ ...r, business_id: business.id }));
+  const { error } = await save(row);
+  if (error) await save(parsed.data); // before migration 007: save the basics
   revalidatePath("/dashboard", "layout");
+}
+export async function setServiceImage(id: string, publicUrl: string | null) {
+  const { supabase, business } = await requireBusiness();
+  if (publicUrl && !publicUrl.startsWith(process.env.NEXT_PUBLIC_SUPABASE_URL!)) return;
+  await supabase.from("services").update({ image_url: publicUrl }).eq("id", id).eq("business_id", business.id);
+  revalidatePath("/dashboard", "layout");
+}
+
+// ----- booking / order rules -----
+export async function saveRules(form: FormData) {
+  const { supabase, business } = await requireBusiness();
+  const num = (k: string, min: number, max: number, def: number) => Math.min(max, Math.max(min, Math.round(Number(form.get(k) ?? def) || 0)));
+  const money = (k: string) => Math.max(0, Math.round((Number(form.get(k) ?? 0) || 0) * 100) / 100);
+  const kind = getKind(String(form.get("type") ?? business.type));
+  const row: Record<string, unknown> = { type: kind.id, mode: kind.mode };
+  if (kind.mode === "orders") {
+    row.daily_limit = num("daily_limit", 1, 500, 6);
+    row.lead_days = num("lead_days", 0, 60, 1);
+    row.advance_pct = num("advance_pct", 0, 100, 0);
+    row.delivery_fee = form.get("delivery") === "on" ? money("delivery_fee") : null;
+  } else {
+    row.deposit_amount = money("deposit_amount");
+    row.prep_note = String(form.get("prep_note") ?? "").trim().slice(0, 300) || null;
+  }
+  const { error } = await supabase.from("businesses").update(row).eq("id", business.id);
+  if (error) console.error("saveRules", error.message);
+  revalidatePath("/dashboard", "layout");
+  revalidatePath(`/${business.slug}`);
 }
 export async function deleteService(form: FormData) {
   const { supabase, business } = await requireBusiness();
@@ -90,6 +139,23 @@ export async function addStaff(form: FormData) {
   const { supabase, business } = await requireBusiness();
   const name = String(form.get("name") ?? "").trim().slice(0, 60);
   if (name) await supabase.from("staff").insert({ business_id: business.id, name });
+  revalidatePath("/dashboard", "layout");
+}
+export async function saveStaffInfo(form: FormData) {
+  const { supabase, business } = await requireBusiness();
+  const id = String(form.get("id") ?? "");
+  const name = String(form.get("name") ?? "").trim().slice(0, 60);
+  const specialty = String(form.get("specialty") ?? "").trim().slice(0, 60) || null;
+  if (!id || !name) return;
+  const { error } = await supabase.from("staff").update({ name, specialty }).eq("id", id).eq("business_id", business.id);
+  if (error) await supabase.from("staff").update({ name }).eq("id", id).eq("business_id", business.id);
+  revalidatePath("/dashboard", "layout");
+}
+export async function setStaffPortfolio(id: string, urls: string[]) {
+  const { supabase, business } = await requireBusiness();
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const clean = urls.filter((u) => typeof u === "string" && u.startsWith(base)).slice(0, 12);
+  await supabase.from("staff").update({ portfolio: clean }).eq("id", id).eq("business_id", business.id);
   revalidatePath("/dashboard", "layout");
 }
 export async function removeStaff(form: FormData) {
@@ -123,4 +189,7 @@ export async function saveHours(form: FormData) {
   })).filter((r) => r.close_time > r.open_time);
   await supabase.from("business_hours").upsert(rows);
   revalidatePath("/dashboard", "layout");
+}
+export async function setServiceImages(id: string, urls: string[]) {
+  await setServiceImage(id, urls[0] ?? null);
 }

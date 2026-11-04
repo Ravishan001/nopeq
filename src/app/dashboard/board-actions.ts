@@ -8,7 +8,7 @@ export type BoardItem = {
   id: string; kind: "booking" | "request" | "block";
   staff_id: string | null; starts_at: string; ends_at: string;
   title: string; sub?: string; status?: string; source?: string;
-  customer?: string; phone?: string | null; price?: number;
+  customer?: string; phone?: string | null; price?: number; refs?: string[]; placement?: string | null;
 };
 export type BoardData = { date: string; open: string | null; close: string | null; items: BoardItem[]; needsSql?: boolean };
 
@@ -21,7 +21,7 @@ export async function getBoard(day: string): Promise<BoardData> {
   const { from, to } = dayRange(day, business.timezone);
   const COLS = "id, starts_at, ends_at, status, staff_id, source, customer_name, customer_phone, request_status, requested_starts_at, requested_ends_at, requested_staff_id, services(name, price)";
   // Older databases (before migration 006/005) miss some columns: fall back step by step so the board never goes blank.
-  const LEGACY = [COLS, COLS.replace("source, ", ""), "id, starts_at, ends_at, status, staff_id, customer_name, customer_phone, services(name, price)"];
+  const LEGACY = [`${COLS}, ref_urls, placement`, COLS, COLS.replace("source, ", ""), "id, starts_at, ends_at, status, staff_id, customer_name, customer_phone, services(name, price)"];
   const load = async (cols: string, withRequests: boolean) => Promise.all([
     supabase.from("bookings").select(cols).eq("business_id", business.id).neq("status", "cancelled").lt("starts_at", to).gt("ends_at", from),
     withRequests
@@ -37,20 +37,21 @@ export async function getBoard(day: string): Promise<BoardData> {
   let [onDay, requests] = await load(LEGACY[0], true);
   while ((onDay.error || requests.error) && level < LEGACY.length - 1) {
     level++;
-    [onDay, requests] = await load(LEGACY[level], level < 2);
+    [onDay, requests] = await load(LEGACY[level], level < 3);
   }
   if (onDay.error) console.error("getBoard", onDay.error.message);
-  const needsSql = level > 0 || !!blocks.error;
+  const needsSql = level > 1 || !!blocks.error;
   const seen = new Set<string>();
   const bookings = { data: [...((onDay.data ?? []) as unknown[]), ...((requests.data ?? []) as unknown[])].filter((b) => { const id = (b as { id: string }).id; return seen.has(id) ? false : (seen.add(id), true); }) };
 
   const items: BoardItem[] = [];
   type B = { id: string; starts_at: string; ends_at: string; status: string; staff_id: string | null; source: string; customer_name: string; customer_phone: string | null;
-    request_status: string | null; requested_starts_at: string | null; requested_ends_at: string | null; requested_staff_id: string | null; services: { name: string; price: number } | null };
+    request_status: string | null; requested_starts_at: string | null; requested_ends_at: string | null; requested_staff_id: string | null; services: { name: string; price: number } | null; ref_urls?: string[]; placement?: string | null };
   for (const b of (bookings.data ?? []) as unknown as B[]) {
     if (b.starts_at < to && b.ends_at > from) {
       items.push({ id: b.id, kind: "booking", staff_id: b.staff_id, starts_at: b.starts_at, ends_at: b.ends_at, title: b.services?.name ?? "Booking",
-        status: b.status, source: b.source ?? "online", customer: b.customer_name, phone: b.customer_phone, price: b.services ? Number(b.services.price) : undefined });
+        status: b.status, source: b.source ?? "online", customer: b.customer_name, phone: b.customer_phone, price: b.services ? Number(b.services.price) : undefined,
+        refs: b.ref_urls ?? [], placement: b.placement ?? null });
     }
     if (b.request_status === "pending" && b.requested_starts_at && b.requested_ends_at && b.requested_starts_at < to && b.requested_ends_at > from) {
       items.push({ id: `${b.id}-req`, kind: "request", staff_id: b.requested_staff_id, starts_at: b.requested_starts_at, ends_at: b.requested_ends_at,

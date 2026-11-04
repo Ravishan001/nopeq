@@ -161,3 +161,39 @@ export async function sendReminders() {
   }
   return { checked: data?.length ?? 0, sent };
 }
+
+/** New cake/flower/catering order → owner push (+ email when turned on). */
+export async function notifyOrder(token: string): Promise<string> {
+  try {
+    const admin = adminClient();
+    if (!admin) return "error: SUPABASE_SERVICE_ROLE_KEY missing";
+    const { data: o, error } = await admin.from("orders")
+      .select("id, item_name, size, flavour, fulfilment, due_date, time_pref, customer_name, customer_phone, total, message, businesses(owner_id, name, currency, logo_url, notify_push, notify_email)")
+      .eq("token", token).maybeSingle();
+    if (error || !o) return `error: ${error?.message ?? "order not found"}`;
+    const biz = o.businesses as unknown as { owner_id: string; name: string; currency: string; logo_url: string | null; notify_push: boolean; notify_email: boolean };
+    const day = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(`${o.due_date}T12:00:00Z`));
+    const item = [o.item_name, o.size, o.flavour].filter(Boolean).join(" · ");
+    const how = o.fulfilment === "delivery" ? "🛵 Delivery" : "🏪 Pickup";
+    const msg = {
+      title: `🎂 New order · ${titleCase(o.customer_name)}`,
+      body: [`${item} · ${formatMoney(Number(o.total), biz.currency)}`, `For ${day} · ${how}${o.time_pref ? ` ${o.time_pref}` : ""}`, o.message ? `✍️ “${o.message}”` : ""].filter(Boolean).join("\n"),
+      url: `/dashboard?day=${o.due_date}`, tag: `order-${o.id}`, icon: biz.logo_url ?? undefined, actionLabel: "View order",
+    };
+    const errs: string[] = [];
+    const jobs: Promise<unknown>[] = [];
+    let pushed = 0;
+    if (biz.notify_push) jobs.push(pushToOwner(admin, biz.owner_id, msg, errs).then((n) => { pushed = n; }));
+    if (biz.notify_email) {
+      jobs.push(ownerEmail(admin, biz.owner_id).then((to): Promise<boolean> | false => (to ? sendEmail(to, msg.title, emailLayout(msg.title,
+        [["Item", item], ["For", `${day} · ${how}`], ["Customer", o.customer_name], ["Phone", o.customer_phone ?? "—"], ["Total", formatMoney(Number(o.total), biz.currency)]],
+        { label: "Open dashboard", url: `${site()}/dashboard?day=${o.due_date}` })) : false)));
+    }
+    await Promise.all(jobs);
+    if (errs.length) console.error("notifyOrder push:", errs);
+    return `pushed ${pushed}`;
+  } catch (e) {
+    console.error("notifyOrder", e);
+    return `error: ${(e as Error).message}`;
+  }
+}

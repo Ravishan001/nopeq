@@ -9,6 +9,9 @@ export type Business = {
   tiktok: string | null; plan: string; is_published: boolean;
   country: string; currency: string; timezone: string;
   notify_email: boolean; notify_push: boolean;
+  // migration 007 (may be missing on older databases → treat as a salon)
+  mode?: "slots" | "orders"; daily_limit?: number; lead_days?: number; delivery_fee?: number | null;
+  advance_pct?: number; deposit_amount?: number; prep_note?: string | null;
 };
 
 /** The logged-in owner's business. Redirects to /login or /onboarding when missing. */

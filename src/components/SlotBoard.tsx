@@ -195,6 +195,7 @@ export function SlotBoard({ initial, staff, services, timezone, currency }: {
                     className={`rounded-lg text-left px-2 py-1 text-white overflow-hidden shadow-sm ${past || it.status !== "confirmed" ? "opacity-55" : ""}`}>
                     <span className="block text-[11px] font-bold leading-tight truncate">{it.source === "walkin" ? "🚶 " : ""}{it.title}{p.span === 1 && !p.split && <span className="font-medium opacity-80"> · {ampm(p.startMin)}</span>}</span>
                     {p.span > 1 && <span className="block text-[10px] opacity-85 truncate">{ampm(p.startMin)} – {ampm(p.endMin)}</span>}
+                    {p.span > 2 && !!it.refs?.length && <span className="inline-block mt-1 text-[9.5px] font-semibold bg-black/25 rounded-full px-1.5">📷 {it.refs.length}</span>}
                   </button>
                 );
               }))}
@@ -340,6 +341,12 @@ function ItemSheet({ item, si, tz, currency, onDone }: { item: BoardItem; si: bo
           </div>
           {wa && <a href={`https://wa.me/${wa}`} target="_blank" className="btn-ghost h-10 px-3 text-sm">WhatsApp</a>}
           {item.phone && <a href={`tel:${item.phone}`} className="btn-ghost h-10 px-3 text-sm">Call</a>}
+        </div>
+      )}
+      {(item.placement || !!item.refs?.length) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {item.refs?.map((u) => <a key={u} href={u} target="_blank" rel="noopener noreferrer" className="size-16 rounded-xl overflow-hidden bg-black/10 block"><img src={u} alt="" className="size-full object-cover" /></a>)}
+          {item.placement && <span className="text-sm text-muted">📍 {item.placement}</span>}
         </div>
       )}
       {item.kind === "block" ? (

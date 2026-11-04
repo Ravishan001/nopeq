@@ -155,3 +155,6 @@ export function currencySymbol(currency: string) {
 export function localPrice(lkr: number, country: Country) {
   return country.code === "LK" ? lkr : nicePrice((lkr * country.haircut) / 1000);
 }
+
+/** "Rs 92.4k" — for small stat tiles */
+export const shortMoney = (n: number, cur: string) => `${currencySymbol(cur)} ${n >= 10000 ? `${Math.round(n / 100) / 10}k` : Math.round(n).toLocaleString("en")}`;

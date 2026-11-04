@@ -10,21 +10,30 @@ import { getCountry } from "@/lib/countries";
 import { WEEKDAYS } from "@/lib/i18n";
 import { todayIn, weekdayOf } from "@/lib/time";
 import { BookingFlow } from "./BookingFlow";
+import { OrderFlow } from "./OrderFlow";
+import { getKind } from "@/lib/templates";
 
 async function load(slug: string) {
   if (RESERVED_SLUGS.has(slug) || !/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) return null;
   const supabase = await createClient();
   const { data: b } = await supabase.from("businesses")
-    .select("id, slug, name, sections, country, currency, timezone, logo_url, cover_url, phone, whatsapp, address, maps_url, facebook, instagram, tiktok")
+    .select("*") // newer columns (mode, rules) may not exist before migration 007
     .eq("slug", slug).eq("is_published", true).maybeSingle();
   if (!b) return null;
   const [services, staff, branches, hours] = await Promise.all([
-    supabase.from("services").select("id, name, section, price, duration_min").eq("business_id", b.id).eq("active", true).order("sort"),
-    supabase.from("staff").select("id, name").eq("business_id", b.id).eq("active", true).order("created_at"),
+    supabase.from("services").select("*").eq("business_id", b.id).eq("active", true).order("sort"),
+    supabase.from("staff").select("*").eq("business_id", b.id).eq("active", true).order("created_at"),
     supabase.from("branches").select("id, name").eq("business_id", b.id).order("created_at"),
     supabase.from("business_hours").select("weekday, is_open, open_time, close_time").eq("business_id", b.id),
   ]);
-  return { b, services: services.data ?? [], staff: staff.data ?? [], branches: branches.data ?? [], hours: hours.data ?? [] };
+  type Svc = { id: string; name: string; section: string | null; price: number; duration_min: number; description?: string | null; image_url?: string | null; options?: unknown };
+  type Stf = { id: string; name: string; specialty?: string | null; portfolio?: string[] | null };
+  return {
+    b: b as typeof b & { type?: string; mode?: string; daily_limit?: number; lead_days?: number; delivery_fee?: number | null; advance_pct?: number; deposit_amount?: number; prep_note?: string | null },
+    services: ((services.data ?? []) as Svc[]).map((x) => ({ id: x.id, name: x.name, section: x.section, price: Number(x.price), duration_min: x.duration_min, description: x.description ?? null, image_url: x.image_url ?? null, options: x.options ?? {} })),
+    staff: ((staff.data ?? []) as Stf[]).map((x) => ({ id: x.id, name: x.name, specialty: x.specialty ?? null, portfolio: x.portfolio ?? [] })),
+    branches: branches.data ?? [], hours: hours.data ?? [],
+  };
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -60,6 +69,8 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
   const { b } = d;
   const si = lang === "si";
   const dial = getCountry(b.country).dial;
+  const kind = getKind(b.type);
+  const orders = b.mode === "orders";
   const wa = (b.whatsapp || b.phone || "").replace(/\D/g, "").replace(/^0/, dial);
 
   // open now?
@@ -125,7 +136,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
         {/* profile */}
         <section className="relative z-10 -mt-20 sm:-mt-24 flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6">
           <div className="size-28 sm:size-32 rounded-3xl border-4 border-[var(--bg)] bg-card overflow-hidden flex items-center justify-center text-4xl shrink-0 shadow-xl">
-            {b.logo_url ? <img src={b.logo_url} alt={b.name} className="size-full object-cover" /> : "✂️"}
+            {b.logo_url ? <img src={b.logo_url} alt={b.name} className="size-full object-cover" /> : kind.icon}
           </div>
           <div className="min-w-0 flex-1 pb-1">
             <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${status.on ? "bg-green-500/15 text-green-700 dark:text-green-400" : "bg-black/5 dark:bg-white/10 text-muted"}`}>
@@ -153,11 +164,17 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-8 mt-10">
           <div className="min-w-0">
-            <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight">{t("book_title")}</h2>
+            <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight">{orders ? (si ? "Online order කරන්න" : "Order online") : t("book_title")}</h2>
             <p className="text-muted mt-1">{t("no_login")}</p>
             <div className="mt-6">
-              {d.services.length ? (
-                <BookingFlow businessId={b.id} sections={b.sections} services={d.services} staff={d.staff} branches={d.branches} currency={b.currency} timezone={b.timezone} dial={dial} />
+              {d.services.length && orders ? (
+                <OrderFlow businessId={b.id} kind={kind.id} icon={kind.icon} sections={b.sections} products={d.services}
+                  openDays={d.hours.filter((x) => x.is_open).map((x) => x.weekday)}
+                  rules={{ dailyLimit: b.daily_limit ?? 6, leadDays: b.lead_days ?? 1, deliveryFee: b.delivery_fee == null ? null : Number(b.delivery_fee), advancePct: b.advance_pct ?? 0 }}
+                  currency={b.currency} timezone={b.timezone} dial={dial} refs={!!kind.refs} />
+              ) : d.services.length ? (
+                <BookingFlow businessId={b.id} sections={b.sections} services={d.services} staff={d.staff} branches={d.branches} currency={b.currency} timezone={b.timezone} dial={dial}
+                  extras={{ refs: !!kind.refs, placement: !!kind.placement, staffWord: kind.staffWord?.[lang] ?? null, deposit: Number(b.deposit_amount ?? 0), prepNote: b.prep_note ?? null }} />
               ) : (
                 <div className="card p-8 text-center text-muted">—</div>
               )}

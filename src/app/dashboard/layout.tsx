@@ -18,7 +18,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
         }
       />
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <DashNav labels={{ dashboard: t("dashboard"), bookings: t("bookings"), settings: t("settings") }} slug={business.slug} viewLabel={t("view_page")} />
+        <DashNav labels={{ dashboard: t("dashboard"), bookings: business.mode === "orders" ? "Orders" : t("bookings"), settings: t("settings") }} slug={business.slug} viewLabel={t("view_page")} />
         <div className="sm:hidden mb-4"><InstallButton className="w-full" /></div>
         <main className="pb-16">{children}</main>
       </div>
