@@ -37,11 +37,20 @@ function details(b: Row, w: ReturnType<typeof words>, owner: boolean) {
   return rows;
 }
 
-async function load(token: string) {
+const LEGACY_SELECT = SELECT.replace("requested_starts_at, request_status, ", "");
+
+async function load(token: string): Promise<{ admin: NonNullable<ReturnType<typeof adminClient>>; b: Row } | { error: string }> {
   const admin = adminClient();
-  if (!admin) return null;
-  const { data } = await admin.from("bookings").select(SELECT).eq("token", token).maybeSingle();
-  return data ? { admin, b: data as unknown as Row } : null;
+  if (!admin) return { error: "SUPABASE_SERVICE_ROLE_KEY missing" };
+  let { data, error } = await admin.from("bookings").select(SELECT).eq("token", token).maybeSingle();
+  if (error) {
+    // migration 005 not run yet → still notify with the older columns
+    console.error("notify load (retrying without reschedule columns):", error.message);
+    ({ data, error } = await admin.from("bookings").select(LEGACY_SELECT).eq("token", token).maybeSingle());
+  }
+  if (error) return { error: error.message };
+  if (!data) return { error: "booking not found" };
+  return { admin, b: data as unknown as Row };
 }
 
 async function ownerEmail(admin: NonNullable<ReturnType<typeof adminClient>>, ownerId: string) {
@@ -89,10 +98,10 @@ function pushMessage(b: Row, kind: NotifyKind, fromIso?: string) {
 }
 
 /** Booking events → owner (push + email) and, where it matters, the customer (email). */
-export async function notifyBooking(token: string, kind: NotifyKind, fromIso?: string) {
+export async function notifyBooking(token: string, kind: NotifyKind, fromIso?: string): Promise<string> {
   try {
     const ctx = await load(token);
-    if (!ctx) return;
+    if ("error" in ctx) { console.error("notifyBooking:", ctx.error); return `error: ${ctx.error}`; }
     const { admin, b } = ctx;
     const biz = b.businesses;
     const w = words(biz.country === "LK");
@@ -102,8 +111,10 @@ export async function notifyBooking(token: string, kind: NotifyKind, fromIso?: s
     const jobs: Promise<unknown>[] = [];
 
     // owner: everything the customer does
+    const pushErrors: string[] = [];
+    let pushed = 0;
     if (kind === "new" || kind === "cancelled" || kind === "change_request") {
-      if (biz.notify_push) jobs.push(pushToOwner(admin, biz.owner_id, msg));
+      if (biz.notify_push) jobs.push(pushToOwner(admin, biz.owner_id, msg, pushErrors).then((n) => { pushed = n; }));
       if (biz.notify_email) {
         const rows = details(b, w, true);
         if (kind === "change_request" && b.requested_starts_at) rows.unshift(["Requested", fmtDateTime(b.requested_starts_at, "en", biz.timezone)]);
@@ -119,8 +130,11 @@ export async function notifyBooking(token: string, kind: NotifyKind, fromIso?: s
         emailLayout(`${subj} · ${biz.name}`, details(b, w, false), { label: w.cView, url: link }, extra ? `${extra} ${w.cFooter}` : w.cFooter)));
     }
     await Promise.all(jobs);
+    if (pushErrors.length) console.error("notifyBooking push:", pushErrors);
+    return `pushed ${pushed}${biz.notify_push ? "" : " (push turned off in settings)"}${pushErrors.length ? ` · ${pushErrors[0]}` : ""}`;
   } catch (e) {
     console.error("notifyBooking", e);
+    return `error: ${(e as Error).message}`;
   }
 }
 
@@ -129,7 +143,7 @@ export async function sendReminders() {
   const admin = adminClient();
   if (!admin) return { error: "no service key" };
   const now = Date.now();
-  const { data } = await admin.from("bookings").select(SELECT)
+  const { data } = await admin.from("bookings").select(LEGACY_SELECT)
     .eq("status", "confirmed").is("reminder_sent_at", null).not("customer_email", "is", null)
     .gte("starts_at", new Date(now + 30 * 60_000).toISOString())
     .lte("starts_at", new Date(now + 2 * 3600_000 + 10 * 60_000).toISOString())

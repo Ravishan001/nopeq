@@ -33,6 +33,15 @@ export async function sendTestPush() {
   return { sent, error: errors[0] };
 }
 
+/** Debug: re-send the notification for the most recent booking and report what happened. */
+export async function resendLastBooking() {
+  const { supabase, business } = await requireBusiness();
+  const { data } = await supabase.from("bookings").select("token").eq("business_id", business.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (!data) return "no bookings yet";
+  const { notifyBooking } = await import("@/lib/notify");
+  return notifyBooking(data.token, "new");
+}
+
 export async function setNotifyPrefs(form: FormData) {
   const { supabase, business } = await requireBusiness();
   await supabase.from("businesses").update({
