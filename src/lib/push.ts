@@ -35,7 +35,9 @@ export type PushPayload = { title: string; body: string; url: string; tag?: stri
 /** Push to every device an owner has enabled. Dead subscriptions are removed. */
 export async function pushToOwner(admin: SupabaseClient, ownerId: string, payload: PushPayload, errors?: string[]) {
   if (!init()) { errors?.push(`keys: ${vapidCheck().reason}`); return 0; }
-  const { data: subs } = await admin.from("push_subscriptions").select("id, endpoint, p256dh, auth").eq("owner_id", ownerId);
+  const { data: subs, error } = await admin.from("push_subscriptions").select("id, endpoint, p256dh, auth").eq("owner_id", ownerId);
+  if (error) errors?.push(`service key can't read devices: ${error.message}`);
+  else if (!subs?.length) errors?.push("service key sees 0 devices — SUPABASE_SERVICE_ROLE_KEY is probably the anon/publishable key, not the service_role/secret key");
   let sent = 0;
   await Promise.all((subs ?? []).map(async (s) => {
     try {
