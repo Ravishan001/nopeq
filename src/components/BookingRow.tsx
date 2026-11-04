@@ -50,6 +50,6 @@ export function BookingRow({ b, lang, t, tz, currency }: { b: BookingRowData; la
   );
 }
 
-export const BOOKING_SELECT = "id, starts_at, status, request_status, requested_starts_at, customer_name, customer_phone, note, services(name, price), staff(name), branches(name)";
+export const BOOKING_SELECT = "id, starts_at, status, request_status, requested_starts_at, customer_name, customer_phone, note, services(name, price), staff:staff!bookings_staff_id_fkey(name), branches(name)";
 /** Same list without the reschedule columns (works before migration 005 is run). */
 export const BOOKING_SELECT_LEGACY = BOOKING_SELECT.replace("request_status, requested_starts_at, ", "");

@@ -12,7 +12,7 @@ type Row = {
   businesses: { id: string; owner_id: string; name: string; slug: string; logo_url: string | null; country: string; currency: string; timezone: string; notify_email: boolean; notify_push: boolean };
 };
 
-const SELECT = "id, token, status, starts_at, requested_starts_at, request_status, customer_name, customer_phone, customer_email, note, services(name, price), staff(name), branches(name), businesses(id, owner_id, name, slug, logo_url, country, currency, timezone, notify_email, notify_push)";
+const SELECT = "id, token, status, starts_at, requested_starts_at, request_status, customer_name, customer_phone, customer_email, note, services(name, price), staff:staff!bookings_staff_id_fkey(name), branches(name), businesses(id, owner_id, name, slug, logo_url, country, currency, timezone, notify_email, notify_push)";
 const site = () => (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
 
 function words(lk: boolean) {
