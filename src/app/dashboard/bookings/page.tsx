@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BOOKING_SELECT, BookingRow, type BookingRowData } from "@/components/BookingRow";
+import { BOOKING_SELECT, BOOKING_SELECT_LEGACY, BookingRow, type BookingRowData } from "@/components/BookingRow";
 import { requireBusiness } from "@/lib/business";
 import { getT } from "@/lib/lang";
 
@@ -10,9 +10,15 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
   const { t, lang } = await getT();
   const { view = "upcoming" } = await searchParams;
   const now = new Date().toISOString();
-  let q = supabase.from("bookings").select(BOOKING_SELECT).eq("business_id", business.id);
-  q = view === "past" ? q.lt("starts_at", now).order("starts_at", { ascending: false }) : q.gte("starts_at", now).order("starts_at");
-  const { data } = await q.limit(200);
+  const run = (cols: string) => {
+    const q = supabase.from("bookings").select(cols).eq("business_id", business.id);
+    return (view === "past" ? q.lt("starts_at", now).order("starts_at", { ascending: false }) : q.gte("starts_at", now).order("starts_at")).limit(200);
+  };
+  let { data, error } = await run(BOOKING_SELECT);
+  if (error) {
+    console.error("bookings page:", error.message);
+    ({ data, error } = await run(BOOKING_SELECT_LEGACY));
+  }
   const rows = (data ?? []) as unknown as BookingRowData[];
 
   return (

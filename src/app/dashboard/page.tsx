@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BOOKING_SELECT, BookingRow, type BookingRowData } from "@/components/BookingRow";
+import { BOOKING_SELECT, BOOKING_SELECT_LEGACY, BookingRow, type BookingRowData } from "@/components/BookingRow";
 import { ShareCard } from "@/components/ShareCard";
 import { PushToggle } from "@/components/PushToggle";
 import { NotifyStatus } from "@/components/NotifyStatus";
@@ -15,13 +15,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { t, lang } = await getT();
   const { welcome, debug } = await searchParams;
 
-  const [svc, stf, hrs, upcoming] = await Promise.all([
+  const [svc, stf, hrs, upcomingRes] = await Promise.all([
     supabase.from("services").select("id", { count: "exact", head: true }).eq("business_id", business.id).eq("active", true),
     supabase.from("staff").select("id", { count: "exact", head: true }).eq("business_id", business.id).eq("active", true),
     supabase.from("business_hours").select("weekday", { count: "exact", head: true }).eq("business_id", business.id).eq("is_open", true),
     supabase.from("bookings").select(BOOKING_SELECT).eq("business_id", business.id).eq("status", "confirmed")
       .gte("starts_at", new Date(Date.now() - 3600_000).toISOString()).order("starts_at").limit(10),
   ]);
+  let upcoming = upcomingRes;
+  if (upcoming.error) {
+    console.error("dashboard bookings:", upcoming.error.message);
+    upcoming = await supabase.from("bookings").select(BOOKING_SELECT_LEGACY).eq("business_id", business.id).eq("status", "confirmed")
+      .gte("starts_at", new Date(Date.now() - 3600_000).toISOString()).order("starts_at").limit(10) as typeof upcomingRes;
+  }
 
   const checklist: { key: TKey; done: boolean; href: string; locked?: boolean }[] = [
     { key: "cl_name", done: true, href: "/dashboard/settings" },
