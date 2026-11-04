@@ -45,12 +45,35 @@ export function SlotBoard({ initial, staff, services, timezone, currency }: {
   // place items on the grid
   const placed = useMemo(() => {
     if (open === null) return [];
-    return data.items.map((it) => {
+    const taken = new Set<string>();
+    const raw = data.items.map((it) => {
       const s = Math.max(minutesIn(it.starts_at, timezone), open);
       const e = Math.min(minutesIn(it.ends_at, timezone) || 24 * 60, close ?? 24 * 60);
-      const colIdxs = it.staff_id === null ? cols.map((_, i) => i) : [cols.findIndex((c) => c?.id === it.staff_id)].filter((i) => i >= 0);
-      return { it, row: Math.floor((s - open) / STEP), span: Math.max(1, Math.ceil((e - s) / STEP)), colIdxs, startMin: s, endMin: e };
-    }).filter((p) => p.colIdxs.length && p.span > 0);
+      return { it, row: Math.floor((s - open) / STEP), span: Math.max(1, Math.ceil((e - s) / STEP)), startMin: s, endMin: e };
+    }).filter((p) => p.endMin > p.startMin)
+      // known stylist first, blocks next, "any stylist" last so it can take whichever column is free
+      .sort((a, b) => (a.it.staff_id === null ? (a.it.kind === "block" ? 1 : 2) : 0) - (b.it.staff_id === null ? (b.it.kind === "block" ? 1 : 2) : 0) || a.startMin - b.startMin);
+    const out: { it: BoardItem; row: number; span: number; startMin: number; endMin: number; colIdxs: number[]; lane: 0 | 1; split: boolean }[] = [];
+    for (const p of raw) {
+      let colIdxs: number[];
+      if (p.it.staff_id === null && p.it.kind === "block") colIdxs = cols.map((_, i) => i);
+      else if (p.it.staff_id === null) {
+        const free = cols.findIndex((_, c) => Array.from({ length: p.span }).every((__, r) => !taken.has(`${c}:${p.row + r}`)));
+        colIdxs = [free >= 0 ? free : 0];
+      } else {
+        const i = cols.findIndex((c) => c?.id === p.it.staff_id);
+        colIdxs = i >= 0 ? [i] : cols[0] === null ? [0] : [];
+      }
+      if (!colIdxs.length) continue;
+      for (const c of colIdxs) for (let r = 0; r < p.span; r++) taken.add(`${c}:${p.row + r}`);
+      out.push({ ...p, colIdxs, lane: 0, split: false });
+    }
+    // two items sharing rows in the same column → show them side by side
+    for (const a of out) for (const b of out) {
+      if (a === b || a.colIdxs.length !== 1 || b.colIdxs.length !== 1 || a.colIdxs[0] !== b.colIdxs[0]) continue;
+      if (a.row < b.row + b.span && b.row < a.row + a.span) { a.split = b.split = true; if (out.indexOf(b) > out.indexOf(a)) b.lane = 1; }
+    }
+    return out;
   }, [data, open, close, timezone, cols]);
 
   const busy = useMemo(() => {
@@ -107,6 +130,12 @@ export function SlotBoard({ initial, staff, services, timezone, currency }: {
         <span className="flex items-center gap-1.5"><i className="w-3 h-0.5 bg-red-500" />Now</span>
       </div>
 
+      {data.needsSql && (
+        <div className="mt-3 rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
+          ⚠️ {si ? "Walk-in / Block time වැඩ කරන්න Supabase එකේ 006_walkins_blocks.sql එක run කරන්න." : "Run 006_walkins_blocks.sql in Supabase to enable walk-ins and block time."}
+        </div>
+      )}
+
       {/* grid */}
       <div className={`card mt-3 p-2 pl-0 overflow-x-auto transition-opacity ${loading ? "opacity-60" : ""}`}>
         {rows === 0 ? (
@@ -116,7 +145,7 @@ export function SlotBoard({ initial, staff, services, timezone, currency }: {
             <div className="grid gap-1.5 pb-2 mb-1.5 border-b border-line" style={{ gridTemplateColumns: `44px repeat(${cols.length}, minmax(0,1fr))` }}>
               <div />
               {cols.map((c, i) => {
-                const n = data.items.filter((x) => x.kind === "booking" && (c ? x.staff_id === c.id : true)).length;
+                const n = placed.filter((p) => p.it.kind === "booking" && p.colIdxs.includes(i)).length;
                 return (
                   <div key={c?.id ?? "all"} className="flex flex-col items-center gap-0.5 min-w-0">
                     <span className="size-7 rounded-full text-white text-xs font-bold flex items-center justify-center" style={{ background: COLORS[i % COLORS.length] }}>{(c?.name ?? "All")[0]}</span>
@@ -148,7 +177,7 @@ export function SlotBoard({ initial, staff, services, timezone, currency }: {
               {placed.map((p) => p.colIdxs.map((ci) => {
                 const { it } = p;
                 const past = isToday && p.endMin <= now;
-                const common = { gridRow: `${p.row + 1} / span ${p.span}`, gridColumn: ci + 2 } as const;
+                const common = { gridRow: `${p.row + 1} / span ${p.span}`, gridColumn: ci + 2, ...(p.split ? { width: "calc(50% - 2px)", justifySelf: p.lane ? "end" : "start" } : {}) } as const;
                 if (it.kind === "block") return (
                   <button key={`${it.id}-${ci}`} onClick={() => setSheet({ type: "item", item: it })} style={common}
                     className="rounded-lg text-[11px] font-bold text-muted flex items-center justify-center bg-[repeating-linear-gradient(135deg,rgba(127,127,127,.18)_0_5px,transparent_5px_10px)]">
@@ -164,7 +193,7 @@ export function SlotBoard({ initial, staff, services, timezone, currency }: {
                 return (
                   <button key={`${it.id}-${ci}`} onClick={() => setSheet({ type: "item", item: it })} style={{ ...common, background: svcColor(it.title) }}
                     className={`rounded-lg text-left px-2 py-1 text-white overflow-hidden shadow-sm ${past || it.status !== "confirmed" ? "opacity-55" : ""}`}>
-                    <span className="block text-[11px] font-bold leading-tight truncate">{it.source === "walkin" ? "🚶 " : ""}{it.title}</span>
+                    <span className="block text-[11px] font-bold leading-tight truncate">{it.source === "walkin" ? "🚶 " : ""}{it.title}{p.span === 1 && !p.split && <span className="font-medium opacity-80"> · {ampm(p.startMin)}</span>}</span>
                     {p.span > 1 && <span className="block text-[10px] opacity-85 truncate">{ampm(p.startMin)} – {ampm(p.endMin)}</span>}
                   </button>
                 );

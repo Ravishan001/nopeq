@@ -55,7 +55,7 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
   const tabs: [string, string][] = [["upcoming", si ? "ඉදිරියට" : "Upcoming"], ["today", si ? "අද" : "Today"], ["past", si ? "පහු වෙච්ච" : "History"]];
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-3xl">
       <div className="flex p-1 rounded-2xl bg-card border border-line">
         {tabs.map(([v, l]) => (
           <Link key={v} href={`?view=${v}`} className={`flex-1 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition ${view === v ? "bg-brand text-white shadow-md shadow-brand/30" : "text-muted hover:text-fg"}`}>{l}</Link>
