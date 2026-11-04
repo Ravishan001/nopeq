@@ -23,8 +23,9 @@ export function freeSlots(opts: {
     const clash = (b: Busy) => new Date(b.starts_at).getTime() < end && new Date(b.ends_at).getTime() > start;
     let ok: boolean;
     if (staffIds.length === 0) ok = !busy.some(clash);
-    else if (staffId) ok = !busy.some((b) => b.staff_id === staffId && clash(b));
-    else ok = staffIds.some((id) => !busy.some((b) => b.staff_id === id && clash(b)));
+    // staff_id null = blocked for the whole salon
+    else if (staffId) ok = !busy.some((b) => (b.staff_id === staffId || b.staff_id === null) && clash(b));
+    else ok = staffIds.some((id) => !busy.some((b) => (b.staff_id === id || b.staff_id === null) && clash(b)));
     out.push({ t: label(m), free: ok });
   }
   return out;

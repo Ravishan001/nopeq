@@ -6,7 +6,7 @@ import { formatMoney } from "./countries";
 import { fmtDateTime } from "./time";
 
 type Row = {
-  id: string; token: string; status: string; starts_at: string; customer_name: string; customer_phone: string;
+  id: string; token: string; status: string; starts_at: string; customer_name: string; customer_phone: string | null;
   customer_email: string | null; note: string | null; requested_starts_at: string | null; request_status: string | null;
   services: { name: string; price: number } | null; staff: { name: string } | null; branches: { name: string } | null;
   businesses: { id: string; owner_id: string; name: string; slug: string; logo_url: string | null; country: string; currency: string; timezone: string; notify_email: boolean; notify_push: boolean };
@@ -31,7 +31,7 @@ function details(b: Row, w: ReturnType<typeof words>, owner: boolean) {
   if (b.staff) rows.push([w.staff, b.staff.name]);
   if (b.branches) rows.push([w.branch, b.branches.name]);
   if (owner) {
-    rows.push([w.customer, b.customer_name], [w.phone, b.customer_phone]);
+    rows.push([w.customer, b.customer_name], [w.phone, b.customer_phone ?? "—"]);
     if (b.note) rows.push([w.note, b.note]);
   }
   return rows;

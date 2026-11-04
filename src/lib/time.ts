@@ -46,3 +46,12 @@ export function fmtDateTime(iso: string, _lang: "si" | "en", tz: string) {
 export function isValidTz(tz: string) {
   try { new Intl.DateTimeFormat("en", { timeZone: tz }); return true; } catch { return false; }
 }
+
+/** Minutes after midnight of an instant, in a time zone. */
+export function minutesIn(iso: string | Date, tz: string) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  return Number(p.hour) * 60 + Number(p.minute);
+}
+export const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+export const ampm = (min: number) => { const h = Math.floor(min / 60), m = min % 60; return `${((h + 11) % 12) + 1}${m ? `:${String(m).padStart(2, "0")}` : ""} ${h < 12 ? "AM" : "PM"}`; };
