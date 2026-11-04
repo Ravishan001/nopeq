@@ -27,9 +27,10 @@ export async function removePushSubscription(endpoint: string) {
 export async function sendTestPush() {
   const { user, business } = await requireBusiness();
   const admin = adminClient();
-  if (!admin) return { sent: 0 };
-  const sent = await pushToOwner(admin, user.id, { title: `NopeQ ✅ ${business.name}`, body: "Notifications වැඩ / Notifications are working!", url: "/dashboard" });
-  return { sent };
+  if (!admin) return { sent: 0, error: "no service role key" };
+  const errors: string[] = [];
+  const sent = await pushToOwner(admin, user.id, { title: `NopeQ ✅ ${business.name}`, body: "Notifications වැඩ / Notifications are working!", url: "/dashboard" }, errors);
+  return { sent, error: errors[0] };
 }
 
 export async function setNotifyPrefs(form: FormData) {

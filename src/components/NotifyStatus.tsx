@@ -1,18 +1,20 @@
 import { requireBusiness } from "@/lib/business";
 import { adminClient } from "@/lib/supabase/admin";
 import { TestPushButton } from "./TestPushButton";
+import { vapidCheck } from "@/lib/push";
 
 /** Server-side health check so the owner can see exactly what's missing. */
 export async function NotifyStatus({ lang }: { lang: "si" | "en" }) {
   const { supabase, user } = await requireBusiness();
   const si = lang === "si";
   const admin = adminClient();
-  const vapid = !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && !!process.env.VAPID_PRIVATE_KEY;
+  const vc = vapidCheck();
+  const vapid = vc.ok;
   const { count, error } = await supabase.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("owner_id", user.id);
   const dbOk = !error;
   const rows: [boolean, string][] = [
     [dbOk, si ? "Database (003 migration)" : "Database (003 migration)"],
-    [vapid, si ? "Push keys (VAPID) Vercel එකේ" : "Push keys (VAPID) in Vercel"],
+    [vapid, (si ? "Push keys (VAPID) Vercel එකේ" : "Push keys (VAPID) in Vercel") + (vc.ok ? "" : ` — ${vc.reason}`)],
     [!!admin, si ? "SUPABASE_SERVICE_ROLE_KEY Vercel එකේ" : "SUPABASE_SERVICE_ROLE_KEY in Vercel"],
     [(count ?? 0) > 0, si ? `On කරපු devices: ${count ?? 0}` : `Devices turned on: ${count ?? 0}`],
   ];
@@ -24,7 +26,7 @@ export async function NotifyStatus({ lang }: { lang: "si" | "en" }) {
           <li key={label} className="flex items-center gap-2"><span>{ok ? "✅" : "❌"}</span><span className={ok ? "text-muted" : "font-semibold"}>{label}</span></li>
         ))}
       </ul>
-      {dbOk && vapid && admin && (count ?? 0) > 0 && <div className="mt-3"><TestPushButton label={si ? "Test notification එකක් යවන්න" : "Send a test notification"} /></div>}
+      {dbOk && admin && (count ?? 0) > 0 && <div className="mt-3"><TestPushButton label={si ? "Test notification එකක් යවන්න" : "Send a test notification"} /></div>}
     </div>
   );
 }
