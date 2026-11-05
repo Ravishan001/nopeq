@@ -1,40 +1,43 @@
 "use client";
-import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
-import { useRef, useState } from "react";
+import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
+import { useState } from "react";
 import { useLang } from "./I18nProvider";
 
 function useShare(url: string, name: string) {
   const [copied, setCopied] = useState(false);
-  const canvas = useRef<HTMLCanvasElement>(null);
   return {
-    copied, canvas,
+    copied,
     copy: () => { navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); },
     wa: `https://wa.me/?text=${encodeURIComponent(`Book your time at ${name}: ${url}`)}`,
-    download: () => {
-      const c = canvas.current; if (!c) return;
-      const a = document.createElement("a");
-      a.href = c.toDataURL("image/png"); a.download = `${name.replace(/\W+/g, "-")}-booking-qr.png`; a.click();
-    },
   };
+}
+
+/** QR with the business logo in the middle (high error correction keeps it scannable). Tap → poster. */
+function Qr({ url, logo, size }: { url: string; logo: string | null; size: number }) {
+  const slug = url.split("/").pop() ?? "";
+  return (
+    <Link href="/dashboard/poster" title="Open poster" className="block bg-white rounded-2xl p-3 w-fit mx-auto hover:scale-[1.02] transition">
+      <QRCodeSVG value={url} size={size} level="H" fgColor="#0B0F1C"
+        imageSettings={logo ? { src: `/api/logo/${slug}`, height: Math.round(size * 0.23), width: Math.round(size * 0.23), excavate: true } : undefined} />
+    </Link>
+  );
 }
 
 function Actions({ url, name, big = false }: { url: string; name: string; big?: boolean }) {
   const si = useLang() === "si";
   const s = useShare(url, name);
   return (
-    <>
-      <QRCodeCanvas ref={s.canvas} value={url} size={1024} marginSize={2} className="hidden" />
-      <div className={`grid ${big ? "grid-cols-2" : "grid-cols-3"} gap-2 mt-4`}>
-        <button className="btn-ghost h-11 text-sm" onClick={s.copy}>{s.copied ? "✓ Copied" : si ? "Copy link" : "Copy link"}</button>
-        <a className={`${big ? "btn h-11" : "btn-ghost h-11"} text-sm`} href={s.wa} target="_blank">WhatsApp</a>
-        <button className={`btn-ghost h-11 text-sm ${big ? "col-span-2" : ""}`} onClick={s.download}>⤓ {big ? (si ? "QR එක download කරන්න (print)" : "Download QR (print)") : "Print"}</button>
-      </div>
-    </>
+    <div className={`grid ${big ? "grid-cols-2" : "grid-cols-3"} gap-2 mt-4`}>
+      <button className="btn-ghost h-11 text-sm" onClick={s.copy}>{s.copied ? "✓ Copied" : si ? "Copy link" : "Copy link"}</button>
+      <a className={`${big ? "btn-ghost" : "btn-ghost"} h-11 text-sm`} href={s.wa} target="_blank">WhatsApp</a>
+      <Link className={`btn h-11 text-sm ${big ? "col-span-2" : ""}`} href="/dashboard/poster">🖨️ {big ? (si ? "Poster එක (print / download)" : "Poster (print / download)") : "Poster"}</Link>
+    </div>
   );
 }
 
 /** Small "QR" button → bottom sheet with a big scannable QR (phones). */
-export function ShareButton({ url, name }: { url: string; name: string }) {
+export function ShareButton({ url, name, logo = null }: { url: string; name: string; logo?: string | null }) {
   const si = useLang() === "si";
   const [open, setOpen] = useState(false);
   return (
@@ -49,7 +52,8 @@ export function ShareButton({ url, name }: { url: string; name: string }) {
             <div className="w-10 h-1.5 rounded-full bg-black/10 dark:bg-white/15 mx-auto mb-4 sm:hidden" />
             <h3 className="font-display font-bold text-xl">{si ? "Booking page එක share කරන්න" : "Share your booking page"}</h3>
             <p className="text-sm text-muted mt-1">{si ? "Customers scan කරලා book කරනවා. Login ඕන නෑ." : "Customers scan this to book — no login needed"}</p>
-            <div className="bg-white rounded-2xl p-4 w-fit mx-auto mt-5"><QRCodeSVG value={url} size={210} /></div>
+            <div className="mt-5"><Qr url={url} logo={logo} size={210} /></div>
+            <p className="text-xs text-muted mt-2">{si ? "QR එක tap කරලා poster එක open කරන්න" : "Tap the QR to open the poster"}</p>
             <div className="font-semibold mt-3 break-all">{url.replace(/^https?:\/\//, "")}</div>
             <Actions url={url} name={name} big />
           </div>
@@ -60,11 +64,11 @@ export function ShareButton({ url, name }: { url: string; name: string }) {
 }
 
 /** Big QR panel (computer sidebar). */
-export function QrCard({ url, name }: { url: string; name: string }) {
+export function QrCard({ url, name, logo = null }: { url: string; name: string; logo?: string | null }) {
   const si = useLang() === "si";
   return (
     <div className="card p-5 text-center">
-      <div className="bg-white rounded-2xl p-3 w-fit mx-auto"><QRCodeSVG value={url} size={150} /></div>
+      <Qr url={url} logo={logo} size={150} />
       <div className="font-display font-bold mt-3">{si ? "Scan කරලා book කරන්න" : "Scan to book"}</div>
       <div className="text-sm text-muted break-all">{url.replace(/^https?:\/\//, "")}</div>
       <Actions url={url} name={name} />
@@ -73,12 +77,12 @@ export function QrCard({ url, name }: { url: string; name: string }) {
 }
 
 /** Compact link card with a small QR (phones, below the board). */
-export function LinkCard({ url, name }: { url: string; name: string }) {
+export function LinkCard({ url, name, logo = null }: { url: string; name: string; logo?: string | null }) {
   const si = useLang() === "si";
   return (
     <div className="card p-4">
       <div className="flex gap-4 items-center">
-        <div className="bg-white p-1.5 rounded-xl shrink-0"><QRCodeSVG value={url} size={72} /></div>
+        <Link href="/dashboard/poster" className="bg-white p-1.5 rounded-xl shrink-0"><QRCodeSVG value={url} size={72} level="H" imageSettings={logo ? { src: `/api/logo/${url.split("/").pop()}`, height: 18, width: 18, excavate: true } : undefined} /></Link>
         <div className="min-w-0">
           <div className="font-semibold">{si ? "ඔයාගේ booking link එක" : "Your booking link"}</div>
           <div className="text-sm text-muted break-all">{url.replace(/^https?:\/\//, "")}</div>

@@ -12,6 +12,7 @@ import { todayIn, weekdayOf } from "@/lib/time";
 import { BookingFlow } from "./BookingFlow";
 import { OrderFlow } from "./OrderFlow";
 import { getKind } from "@/lib/templates";
+import { loadPublicBusiness } from "@/lib/public-business";
 import { isPro } from "@/lib/plan";
 import { aiOn, type Biz } from "@/lib/ai";
 import { ChatWidget } from "@/components/ChatWidget";
@@ -19,10 +20,12 @@ import { ChatWidget } from "@/components/ChatWidget";
 async function load(slug: string) {
   if (RESERVED_SLUGS.has(slug) || !/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) return null;
   const supabase = await createClient();
-  const { data: b } = await supabase.from("businesses")
-    .select("*") // newer columns (mode, rules) may not exist before migration 007
-    .eq("slug", slug).eq("is_published", true).maybeSingle();
-  if (!b) return null;
+  // visitors may only read public columns — never select("*") here (it 404s for logged-out phones)
+  const row = await loadPublicBusiness(supabase as never, slug);
+  if (!row) return null;
+  const b = row as { id: string; slug: string; name: string; sections: string[]; country: string; currency: string; timezone: string;
+    logo_url: string | null; cover_url: string | null; phone: string | null; whatsapp: string | null; address: string | null;
+    maps_url: string | null; facebook: string | null; instagram: string | null; tiktok: string | null; plan?: string };
   const [services, staff, branches, hours, full] = await Promise.all([
     supabase.from("services").select("*").eq("business_id", b.id).eq("active", true).order("sort"),
     supabase.from("staff").select("*").eq("business_id", b.id).eq("active", true).order("created_at"),

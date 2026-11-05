@@ -90,7 +90,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           <div className="font-display font-bold leading-tight truncate">{business.name}</div>
           <div className="text-xs text-muted truncate">/{business.slug}{pct === 100 ? " · ✓ Setup complete" : ""}</div>
         </div>
-        <div className="flex gap-1.5 shrink-0 lg:hidden"><ShareButton url={url} name={business.name} /></div>
+        <div className="flex gap-1.5 shrink-0 lg:hidden"><ShareButton url={url} name={business.name} logo={business.logo_url} /></div>
         <a href={`/${business.slug}`} target="_blank" className="btn h-10 px-3 text-sm shrink-0">{si ? "බලන්න" : "View"} ↗</a>
       </div>
       {pct < 100 && (
@@ -145,7 +145,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         </div>
         <div className="lg:hidden space-y-3">
           <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted mt-6 px-1">{si ? "Share සහ alerts" : "Share & alerts"}</h2>
-          <LinkCard url={url} name={business.name} />
+          <LinkCard url={url} name={business.name} logo={business.logo_url} />
           {Alerts}
         </div>
       </div>
@@ -153,7 +153,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <aside className="hidden lg:block space-y-4">
         {BizCard}
         {plan !== "free" && <Link href="/dashboard/report" className="card p-4 flex items-center gap-3 hover:border-brand/50 transition"><span className="text-2xl">📊</span><span className="flex-1"><b className="font-display">{si ? "Monthly report" : "Monthly report"}</b><span className="block text-xs text-muted">{si ? "Bookings, revenue, හොඳම services" : "Bookings, revenue, top services"}</span></span><span className="text-brand font-bold">→</span></Link>}
-        <QrCard url={url} name={business.name} />
+        <QrCard url={url} name={business.name} logo={business.logo_url} />
         {Alerts}
         {!orders && <div className="card p-4">
           <div className="font-display font-bold">{si ? "ඊළඟට" : "Next up"}</div>
