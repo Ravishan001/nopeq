@@ -13,10 +13,12 @@ export function effectivePlan(b: { plan?: string | null; plan_until?: string | n
 export const isPro = (b: { plan?: string | null; plan_until?: string | null }) => effectivePlan(b) !== "free";
 
 /** Pro price for 1 or 12 months (yearly = 10 months, 2 free). */
-export function upgradePrice(currency: string, months: 1 | 12) {
+export function upgradePrice(currency: string, months: 1 | 12, plan: "pro" | "ai" = "pro") {
   const { currency: cur, prices } = planPrices(currency);
-  return { currency: cur, amount: prices[1] * (months === 12 ? 10 : 1), monthly: prices[1], ai: prices[2] };
+  const monthly = plan === "ai" ? prices[2] : prices[1];
+  return { currency: cur, amount: monthly * (months === 12 ? 10 : 1), monthly, ai: prices[2] };
 }
+export const AI_CHATS = 500;
 
 type Rpc = { rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }> };
 /** Online bookings + orders this month (null before migration 008). */

@@ -4,11 +4,13 @@ import { requireBusiness } from "@/lib/business";
 import { isPro, upgradePrice } from "@/lib/plan";
 
 /** Creates (or reuses) a bank-transfer reference for 1 or 12 months of Pro. */
-export async function createUpgrade(months: 1 | 12): Promise<{ reference?: string; amount?: number; currency?: string; error?: string }> {
-  if (months !== 1 && months !== 12) return { error: "invalid" };
+export async function createUpgrade(months: 1 | 12, plan: "pro" | "ai" = "pro"): Promise<{ reference?: string; amount?: number; currency?: string; error?: string }> {
+  if ((months !== 1 && months !== 12) || (plan !== "pro" && plan !== "ai")) return { error: "invalid" };
   const { supabase, business } = await requireBusiness();
-  const price = upgradePrice(business.currency, months);
-  const { data, error } = await supabase.rpc("request_upgrade", { p_business: business.id, p_months: months, p_amount: price.amount, p_currency: price.currency });
+  const price = upgradePrice(business.currency, months, plan);
+  // migration 009 adds the plan argument; before it, only Pro can be bought
+  let { data, error } = await supabase.rpc("request_upgrade", { p_business: business.id, p_months: months, p_amount: price.amount, p_currency: price.currency, p_plan: plan });
+  if (error && plan === "pro") ({ data, error } = await supabase.rpc("request_upgrade", { p_business: business.id, p_months: months, p_amount: price.amount, p_currency: price.currency }));
   if (error) return { error: error.message.includes("too_many") ? "too_many" : "server" };
   revalidatePath("/dashboard/settings");
   return { reference: data as string, amount: price.amount, currency: price.currency };

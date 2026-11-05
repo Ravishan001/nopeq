@@ -7,7 +7,8 @@ import { OwnerPhotos } from "./OwnerPhotos";
 import { Upgrade } from "./Upgrade";
 import { Reinstall } from "./Reinstall";
 import { saveBrand } from "../billing-actions";
-import { FREE_LIMIT, effectivePlan, fmtDate, monthUsage, upgradePrice } from "@/lib/plan";
+import { AI_CHATS, FREE_LIMIT, effectivePlan, fmtDate, monthUsage, upgradePrice } from "@/lib/plan";
+import { saveAi } from "../ai-actions";
 import { formatMoney } from "@/lib/countries";
 import { KINDS, getKind, readOptions } from "@/lib/templates";
 import { MediaUpload } from "./MediaUpload";
@@ -17,7 +18,7 @@ import { PasswordForm } from "./PasswordForm";
 import { setNotifyPrefs } from "../notify-actions";
 
 export const metadata = { title: "Settings" };
-const ALL_TABS = ["profile", "services", "staff", "hours", "rules", "branches", "plan", "account"] as const;
+const ALL_TABS = ["profile", "services", "staff", "hours", "rules", "ai", "branches", "plan", "account"] as const;
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { supabase, business, user } = await requireBusiness();
@@ -32,7 +33,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     <div>
       <div className="flex gap-2 mb-6 overflow-x-auto">
         {TABS.map((x) => (
-          <Link key={x} href={`?tab=${x}`} className={`chip whitespace-nowrap ${tab === x ? "chip-on" : ""}`}>{x === "plan" ? (effectivePlan(business) === "free" ? "⭐ Plan" : "⭐ Pro") : x === "services" && orders ? "Products" : x === "rules" ? (orders ? (si ? "Order rules" : "Order rules") : (si ? "Booking rules" : "Booking rules")) : x === "staff" && kind.staffWord ? `${kind.staffWord[lang]}s` : t(`tab_${x}` as TKey)}</Link>
+          <Link key={x} href={`?tab=${x}`} className={`chip whitespace-nowrap ${tab === x ? "chip-on" : ""}`}>{x === "ai" ? "🤖 AI" : x === "plan" ? (effectivePlan(business) === "free" ? "⭐ Plan" : effectivePlan(business) === "ai" ? "⭐ AI" : "⭐ Pro") : x === "services" && orders ? "Products" : x === "rules" ? (orders ? (si ? "Order rules" : "Order rules") : (si ? "Booking rules" : "Booking rules")) : x === "staff" && kind.staffWord ? `${kind.staffWord[lang]}s` : t(`tab_${x}` as TKey)}</Link>
         ))}
       </div>
 
@@ -51,6 +52,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       {tab === "hours" && <Hours />}
       {tab === "rules" && <Rules />}
       {tab === "plan" && <Plan />}
+      {tab === "ai" && <Ai />}
       {tab === "branches" && <Branches />}
       {tab === "account" && (
         <div className="space-y-6">
@@ -138,10 +140,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     const plan = effectivePlan(business);
     const money = (n: number, c = business.currency) => formatMoney(n, c, si ? "si-LK" : "en");
     const p1 = upgradePrice(business.currency, 1), p12 = upgradePrice(business.currency, 12);
+    const a1 = upgradePrice(business.currency, 1, "ai"), a12 = upgradePrice(business.currency, 12, "ai");
     const [usage, bank, reqs] = await Promise.all([
       monthUsage(supabase, business.id),
       supabase.from("billing_settings").select("account_name, bank, branch, account_no, note").eq("id", 1).maybeSingle(),
-      supabase.from("payment_requests").select("reference, months, amount, currency, status, slip_path, admin_note, created_at").eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
+      supabase.from("payment_requests").select("reference, plan, months, amount, currency, status, slip_path, admin_note, created_at").eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
     ]);
     if (usage === null) return <div className="card p-6 max-w-xl text-sm">⚠️ {si ? "මුලින් Supabase එකේ 008_plans_billing.sql එක run කරන්න." : "Run 008_plans_billing.sql in Supabase first."}</div>;
     const list = (reqs.data ?? []) as { reference: string; months: number; amount: number; currency: string; status: string; slip_path: string | null; admin_note: string | null; created_at: string }[];
@@ -168,7 +171,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <>
             <div className="card p-5 bg-green-500/5 border-green-500/40 text-center">
               <div className="text-3xl">🎉</div>
-              <div className="font-display font-bold text-lg">{si ? "ඔයා Pro!" : "You're on Pro!"}</div>
+              <div className="font-display font-bold text-lg">{plan === "ai" ? (si ? "ඔයා AI plan එකේ!" : "You're on the AI plan!") : (si ? "ඔයා Pro!" : "You're on Pro!")}</div>
               <p className="text-sm text-muted">{si ? "Unlimited bookings · ඔයාගේ logo එක app icon එක" : "Unlimited bookings · your logo as the app icon"}</p>
               <p className="text-xs text-muted mt-2">{si ? "කලින් renew කරන්න පහළින් ගෙවන්න පුළුවන්. දවස් එකතු වෙනවා." : "You can renew early below — the time is added on."}</p>
             </div>
@@ -192,16 +195,15 @@ export default async function Settings({ searchParams }: { searchParams: Promise
               <div className="flex justify-between items-baseline"><b className="font-display text-lg text-brand">Pro</b><b className="font-display">{money(p1.monthly, p1.currency)}<span className="text-xs text-muted font-sans"> /{si ? "මාසෙට" : "month"}</span></b></div>
               <ul className="text-sm space-y-1.5 mt-3">{feat(true, si ? "Unlimited bookings & orders" : "Unlimited bookings & orders")}{feat(true, si ? "ඔයාගේ logo එක app icon එක" : "Your logo as the app icon")}{feat(true, si ? "Customers ලට ඔයාගේ page එක app එකක් වගේ" : "Customers add your page as an app")}{feat(true, si ? "Brand පාට" : "Your brand colour")}{feat(true, si ? "“powered by NopeQ” අයින් කරන්න" : "Remove “powered by NopeQ”")}{feat(true, si ? "Monthly report" : "Monthly report")}</ul>
             </div>
-            <div className="card p-4 opacity-70">
+            <div className="card p-4 border-violet-500/50">
               <div className="flex justify-between items-baseline"><b className="font-display text-lg text-violet-500">AI</b><b className="font-display">{money(p1.ai, p1.currency)}<span className="text-xs text-muted font-sans"> /{si ? "මාසෙට" : "month"}</span></b></div>
-              <ul className="text-sm space-y-1.5 mt-3">{feat(true, si ? "Pro එකේ ඔක්කොම" : "Everything in Pro")}{feat(true, "AI agent · web + WhatsApp")}</ul>
-              <span className="inline-block mt-4 text-xs font-bold px-2 py-1 rounded-full bg-violet-500/15 text-violet-500">Coming soon</span>
+              <ul className="text-sm space-y-1.5 mt-3">{feat(true, si ? "Pro එකේ ඔක්කොම" : "Everything in Pro")}{feat(true, si ? "AI assistant · chat කරලාම book කරනවා" : "AI assistant that books by chat")}{feat(true, si ? "සිංහල · Singlish · English" : "Sinhala · Singlish · English")}{feat(true, si ? `මාසෙට chats ${AI_CHATS}` : `${AI_CHATS} chats a month`)}{feat(false, si ? "WhatsApp (ඉක්මනින්)" : "WhatsApp (soon)")}</ul>
             </div>
           </div>
         )}
 
         <div className="card p-5">
-          <h3 className="font-display font-bold mb-3">{plan === "free" ? (si ? "⭐ Pro එකට upgrade වෙන්න" : "⭐ Upgrade to Pro") : (si ? "Renew කරන්න" : "Renew")}</h3>
+          <h3 className="font-display font-bold mb-3">{plan === "free" ? (si ? "⭐ Upgrade වෙන්න" : "⭐ Upgrade") : plan === "pro" ? (si ? "Renew / AI එකට upgrade" : "Renew or upgrade to AI") : (si ? "Renew කරන්න" : "Renew")}</h3>
           {rejected && !waiting && !open && <div className="rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-sm p-3 mb-3">✕ {si ? "කලින් payment එක reject වුණා" : "Your last payment was rejected"} ({rejected.reference}){rejected.admin_note ? ` · ${rejected.admin_note}` : ""}</div>}
           {waiting ? (
             <div className="rounded-2xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
@@ -209,12 +211,68 @@ export default async function Settings({ searchParams }: { searchParams: Promise
               <p className="text-muted mt-1">{si ? "සාමාන්‍යයෙන් පැය කීපයකින් activate කරනවා. Notification එකක් එයි." : "We usually activate within a few hours. You'll get a notification."}</p>
             </div>
           ) : (
-            <Upgrade prices={{ m1: p1.amount, m12: p12.amount }} currency={p1.currency} userId={user.id} si={si}
+            <Upgrade plans={{ pro: { m1: p1.amount, m12: p12.amount }, ai: { m1: a1.amount, m12: a12.amount } }} currency={p1.currency} userId={user.id} si={si} onlyAi={plan === "ai"}
               bank={bank.data ?? { account_name: "Ravion Studio", bank: null, branch: null, account_no: null, note: null }}
-              open={open ? { reference: open.reference, months: open.months, amount: Number(open.amount), currency: open.currency } : null} />
+              open={open ? { reference: open.reference, months: open.months, amount: Number(open.amount), currency: open.currency, plan: (open as { plan?: string }).plan } : null} />
           )}
         </div>
       </div>
+    );
+  }
+
+  async function Ai() {
+    const plan = effectivePlan(business);
+    if (plan !== "ai") return (
+      <div className="card p-8 max-w-xl text-center">
+        <div className="text-4xl">🤖</div>
+        <h2 className="font-display font-bold text-xl mt-2">AI assistant</h2>
+        <p className="text-muted mt-2 text-sm">{si ? "Booking page එකේ AI receptionist කෙනෙක්: ප්‍රශ්න වලට උත්තර දෙනවා, ඇත්ත free වෙලාවල් බලලා chat එකෙන්ම book කරනවා. සිංහල, Singlish, English." : "An AI receptionist on your booking page: answers questions, checks real free times and books inside the chat. Sinhala, Singlish and English."}</p>
+        <Link href="?tab=plan" className="btn mt-5">⭐ {si ? "AI plan එක ගන්න" : "Get the AI plan"}</Link>
+      </div>
+    );
+    const [{ data: used }, aiBookings] = await Promise.all([
+      supabase.rpc("ai_month_chats", { p_business: business.id }),
+      supabase.from("bookings").select("id", { count: "exact", head: true }).eq("business_id", business.id).like("note", "💬%")
+        .gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+    ]);
+    const limit = business.ai_limit ?? AI_CHATS;
+    const n = Number(used ?? 0);
+    const keyMissing = !process.env.ANTHROPIC_API_KEY;
+    return (
+      <form action={saveAi} className="card p-6 max-w-2xl space-y-5">
+        <div className="flex items-center justify-between"><h2 className="font-display font-bold text-xl">🤖 AI assistant</h2><Link href="/dashboard/chats" className="text-sm font-semibold text-brand">💬 Chats →</Link></div>
+        {keyMissing && <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm">⚠️ {si ? "Vercel එකේ ANTHROPIC_API_KEY එක දාලා නෑ. ඒක දානකම් chat button එක පේන්නේ නෑ." : "ANTHROPIC_API_KEY isn't set in Vercel. The chat button stays hidden until it is."}</div>}
+        <div className="space-y-3">
+          <label className="flex items-center justify-between gap-3"><span className="font-semibold">{si ? "AI assistant on" : "AI assistant on"}</span><input type="checkbox" name="ai_enabled" defaultChecked={business.ai_enabled !== false} className="size-5 accent-[#F0521F]" /></label>
+          <label className="flex items-center justify-between gap-3"><span className="text-sm">{business.mode === "orders" ? (si ? "AI ට තනියම orders දාන්න දෙන්න" : "Let it place orders by itself") : (si ? "AI ට තනියම book කරන්න දෙන්න" : "Let it book by itself")}</span><input type="checkbox" name="ai_can_book" defaultChecked={business.ai_can_book !== false} className="size-5 accent-[#F0521F]" /></label>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div><label className="label" htmlFor="al">{si ? "Reply කරන භාෂාව" : "Replies in"}</label>
+            <select id="al" name="ai_lang" className="input" defaultValue={business.ai_lang ?? "auto"}>
+              <option value="auto">{si ? "Auto · customer ලියන විදිහටම (සිංහල / Singlish / English)" : "Auto · same as the customer (Sinhala / Singlish / English)"}</option>
+              <option value="si">{si ? "හැමවෙලේම සිංහලෙන්" : "Always Sinhala"}</option>
+              <option value="en">{si ? "English විතරයි" : "English only"}</option>
+            </select></div>
+          <div><label className="label" htmlFor="at">Tone</label>
+            <select id="at" name="ai_tone" className="input" defaultValue={business.ai_tone ?? "friendly"}>
+              <option value="friendly">Friendly</option><option value="formal">Formal</option><option value="short">Short</option>
+            </select></div>
+        </div>
+        <div>
+          <label className="label" htmlFor="an">{si ? "AI දැනගන්න ඕන දේවල්" : "What should it know?"} <span className="text-muted font-normal">({si ? "services, ගාණ, වෙලාවල් auto එනවා" : "services, prices and hours are added automatically"})</span></label>
+          <textarea id="an" name="ai_notes" rows={7} maxLength={4000} className="input h-auto py-3 text-sm" defaultValue={business.ai_notes ?? ""}
+            placeholder={"• Parking: free in front of the shop\n• We accept card + cash\n• Bridal packages: ask for a free consultation\n• Cancel at least 2 hours before"} />
+        </div>
+        <div className="rounded-2xl border border-line p-4">
+          <div className="flex justify-between text-sm"><b>{si ? "මේ මාසේ" : "This month"}</b><span className="text-muted">{n} / {limit} chats</span></div>
+          <div className="h-2 rounded-full bg-black/10 dark:bg-white/10 mt-2 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-700" style={{ width: `${Math.min(100, (n / Math.max(1, limit)) * 100)}%` }} /></div>
+          <p className="text-xs text-muted mt-2">{aiBookings.count ?? 0} {si ? "bookings AI එකෙන් ආවා" : "bookings made by the AI"} · {si ? "limit එක පිරුණම chat button එක සාමාන්‍ය booking එකට යොමු කරනවා" : "when the limit is reached the chat asks customers to book on the page"}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn">{t("save")}</button>
+          <a href={`/${business.slug}?chat=1`} target="_blank" className="btn-ghost">🧪 {si ? "Test කරලා බලන්න" : "Test the assistant"} ↗</a>
+        </div>
+      </form>
     );
   }
 

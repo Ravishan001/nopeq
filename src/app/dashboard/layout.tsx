@@ -6,7 +6,7 @@ import { signOut } from "./actions";
 import { InstallButton } from "@/components/InstallButton";
 
 import type { Metadata } from "next";
-import { isPro } from "@/lib/plan";
+import { effectivePlan, isPro } from "@/lib/plan";
 
 /** Pro: the installed dashboard app uses the business name + logo icon. */
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,8 +20,14 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
-  const { business } = await requireBusiness();
+  const { business, supabase } = await requireBusiness();
   const { t } = await getT();
+  // AI plan: a Chats tab with the number of chats waiting for the owner
+  let chats: number | null = null;
+  if (effectivePlan(business) === "ai") {
+    const { count } = await supabase.from("ai_chats").select("id", { count: "exact", head: true }).eq("business_id", business.id).eq("needs_owner", true);
+    chats = count ?? 0;
+  }
   return (
     <>
       <Header
@@ -32,7 +38,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
         }
       />
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <DashNav labels={{ dashboard: t("dashboard"), bookings: business.mode === "orders" ? "Orders" : t("bookings"), settings: t("settings") }} slug={business.slug} viewLabel={t("view_page")} />
+        <DashNav labels={{ dashboard: t("dashboard"), bookings: business.mode === "orders" ? "Orders" : t("bookings"), settings: t("settings") }} slug={business.slug} viewLabel={t("view_page")} chats={chats} />
         <div className="sm:hidden mb-4"><InstallButton className="w-full" /></div>
         <main className="pb-16">{children}</main>
       </div>

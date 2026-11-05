@@ -8,12 +8,12 @@ import { fmtDate } from "@/lib/plan";
 const uuid = z.string().uuid();
 const addMonths = (from: Date, months: number) => { const d = new Date(from); d.setUTCMonth(d.getUTCMonth() + months); return d; };
 
-async function extend(db: Awaited<ReturnType<typeof requireAdmin>>["db"], businessId: string, months: number) {
+async function extend(db: Awaited<ReturnType<typeof requireAdmin>>["db"], businessId: string, months: number, plan: "pro" | "ai" = "pro") {
   const { data: b } = await db.from("businesses").select("plan, plan_until, owner_id, name").eq("id", businessId).maybeSingle();
   if (!b) return null;
   const base = b.plan !== "free" && b.plan_until && new Date(b.plan_until) > new Date() ? new Date(b.plan_until) : new Date();
   const until = addMonths(base, months).toISOString();
-  const { error } = await db.from("businesses").update({ plan: "pro", plan_until: until }).eq("id", businessId);
+  const { error } = await db.from("businesses").update({ plan, plan_until: until }).eq("id", businessId);
   if (error) throw new Error(error.message);
   return { until, owner: b.owner_id as string, name: b.name as string };
 }
@@ -21,11 +21,11 @@ async function extend(db: Awaited<ReturnType<typeof requireAdmin>>["db"], busine
 export async function approvePayment(id: string) {
   if (!uuid.safeParse(id).success) return;
   const { db } = await requireAdmin();
-  const { data: r } = await db.from("payment_requests").select("business_id, months, status").eq("id", id).maybeSingle();
+  const { data: r } = await db.from("payment_requests").select("business_id, months, status, plan").eq("id", id).maybeSingle();
   if (!r || r.status !== "pending") return;
-  const res = await extend(db, r.business_id, r.months);
+  const res = await extend(db, r.business_id, r.months, r.plan === "ai" ? "ai" : "pro");
   await db.from("payment_requests").update({ status: "approved", decided_at: new Date().toISOString() }).eq("id", id);
-  if (res) await pushToOwner(db, res.owner, { title: "⭐ Pro activated!", body: `${res.name} is on Pro until ${fmtDate(res.until)}.\nTap to get your new app icon.`, url: "/dashboard/settings?tab=plan", tag: "plan" }).catch(() => 0);
+  if (res) await pushToOwner(db, res.owner, { title: r.plan === "ai" ? "🤖 AI plan activated!" : "⭐ Pro activated!", body: `${res.name} is on ${r.plan === "ai" ? "the AI plan" : "Pro"} until ${fmtDate(res.until)}.\nTap to get your new app icon.`, url: "/dashboard/settings?tab=plan", tag: "plan" }).catch(() => 0);
   revalidatePath("/admin");
 }
 
@@ -49,7 +49,7 @@ export async function setPlan(form: FormData) {
   if (!uuid.safeParse(id).success) return;
   const { db } = await requireAdmin();
   if (v === "free") await db.from("businesses").update({ plan: "free", plan_until: null }).eq("id", id);
-  else if (v === "pro1" || v === "pro12") await extend(db, id, v === "pro1" ? 1 : 12);
+  else if (["pro1", "pro12", "ai1", "ai12"].includes(v)) await extend(db, id, v.endsWith("12") ? 12 : 1, v.startsWith("ai") ? "ai" : "pro");
   revalidatePath("/admin");
 }
 

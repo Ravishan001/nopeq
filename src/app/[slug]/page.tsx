@@ -13,6 +13,8 @@ import { BookingFlow } from "./BookingFlow";
 import { OrderFlow } from "./OrderFlow";
 import { getKind } from "@/lib/templates";
 import { isPro } from "@/lib/plan";
+import { aiOn, type Biz } from "@/lib/ai";
+import { ChatWidget } from "@/components/ChatWidget";
 
 async function load(slug: string) {
   if (RESERVED_SLUGS.has(slug) || !/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) return null;
@@ -68,7 +70,7 @@ const Icon = {
   clock: <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
 };
 
-export default async function BusinessPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function BusinessPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ chat?: string }> }) {
   const d = await load((await params).slug);
   if (!d) notFound();
   const { t, lang } = await getT();
@@ -206,6 +208,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
           <span>powered by Ravion Studio</span>
         </div>}
       </main>
+      {aiOn(b as unknown as Biz) && !d.full && <ChatWidget slug={b.slug} name={b.name} icon={kind.icon} logo={b.logo_url} si={si} autoOpen={(await searchParams).chat === "1"} />}
     </div>
   );
 }

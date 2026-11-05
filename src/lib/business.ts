@@ -14,6 +14,8 @@ export type Business = {
   advance_pct?: number; deposit_amount?: number; prep_note?: string | null;
   // migration 008
   plan_until?: string | null; brand_color?: string | null; hide_branding?: boolean;
+  // migration 009
+  ai_enabled?: boolean; ai_can_book?: boolean; ai_lang?: string; ai_tone?: string; ai_notes?: string | null; ai_limit?: number;
 };
 
 /** The logged-in owner's business. Redirects to /login or /onboarding when missing. */

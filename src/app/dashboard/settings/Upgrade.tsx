@@ -6,7 +6,8 @@ import { formatMoney } from "@/lib/countries";
 import { attachSlip, createUpgrade } from "../billing-actions";
 
 type Bank = { account_name: string | null; bank: string | null; branch: string | null; account_no: string | null; note: string | null };
-type Open = { reference: string; months: number; amount: number; currency: string } | null;
+type Open = { reference: string; months: number; amount: number; currency: string; plan?: string } | null;
+type Prices = { m1: number; m12: number };
 
 function Copy({ text }: { text: string }) {
   const [ok, setOk] = useState(false);
@@ -18,9 +19,11 @@ function Copy({ text }: { text: string }) {
 }
 
 /** Pick 1 / 12 months → get a reference → bank details → upload the slip. */
-export function Upgrade({ prices, currency, bank, open, userId, si }: {
-  prices: { m1: number; m12: number }; currency: string; bank: Bank; open: Open; userId: string; si: boolean;
+export function Upgrade({ plans, currency, bank, open, userId, si, onlyAi }: {
+  plans: { pro: Prices; ai: Prices }; currency: string; bank: Bank; open: Open; userId: string; si: boolean; onlyAi?: boolean;
 }) {
+  const [plan, setPlan] = useState<"pro" | "ai">(onlyAi || open?.plan === "ai" ? "ai" : "pro");
+  const prices = plans[plan];
   const money = (n: number, c = currency) => formatMoney(n, c, si ? "si-LK" : "en");
   const [months, setMonths] = useState<1 | 12>(open?.months === 12 ? 12 : 1);
   const [req, setReq] = useState<Open>(open);
@@ -30,9 +33,9 @@ export function Upgrade({ prices, currency, bank, open, userId, si }: {
   const [done, setDone] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
-  const go = (m: 1 | 12) => { setMonths(m); setErr(null); start(async () => {
-    const r = await createUpgrade(m);
-    if (r.reference) setReq({ reference: r.reference, months: m, amount: r.amount!, currency: r.currency! });
+  const go = (m: 1 | 12, p = plan) => { setMonths(m); setPlan(p); setErr(null); start(async () => {
+    const r = await createUpgrade(m, p);
+    if (r.reference) setReq({ reference: r.reference, months: m, amount: r.amount!, currency: r.currency!, plan: p });
     else setErr(r.error === "too_many" ? (si ? "දැනටමත් check කරන්න තියෙන payments තියෙනවා." : "You already have payments waiting to be checked.") : (si ? "මොකක් හරි වැරදුණා. ආයෙ try කරන්න." : "Something went wrong. Try again."));
   }); };
 
@@ -59,6 +62,17 @@ export function Upgrade({ prices, currency, bank, open, userId, si }: {
 
   return (
     <div className="space-y-4">
+      {!onlyAi && (
+        <div className="grid grid-cols-2 gap-2">
+          {(["pro", "ai"] as const).map((p) => (
+            <button key={p} type="button" disabled={busy} onClick={() => (req ? go(months, p) : setPlan(p))}
+              className={`rounded-2xl border-2 p-3 text-left transition ${plan === p ? (p === "ai" ? "border-violet-500 bg-violet-500/10" : "border-brand bg-soft") : "border-line"}`}>
+              <b className={`font-display ${p === "ai" ? "text-violet-500" : "text-brand"}`}>{p === "ai" ? "AI" : "Pro"}</b>
+              <span className="block text-xs text-muted">{p === "ai" ? (si ? "Pro + AI assistant" : "Pro + AI assistant") : (si ? "Unlimited + app icon" : "Unlimited + app icon")}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-2 p-1 rounded-xl bg-black/5 dark:bg-white/5">
         {([1, 12] as const).map((m) => (
           <button key={m} type="button" disabled={busy} onClick={() => (req ? go(m) : setMonths(m))}

@@ -9,7 +9,7 @@ import { approvePayment, rejectPayment, saveBank, setPlan } from "./actions";
 export const metadata = { title: "Admin", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-type Req = { id: string; business_id: string; months: number; amount: number; currency: string; reference: string; slip_path: string | null; status: string; admin_note: string | null; created_at: string; decided_at: string | null };
+type Req = { id: string; business_id: string; plan: string; months: number; amount: number; currency: string; reference: string; slip_path: string | null; status: string; admin_note: string | null; created_at: string; decided_at: string | null };
 type Biz = { id: string; name: string; slug: string; type: string; plan: string; plan_until: string | null; whatsapp: string | null; phone: string | null; address: string | null; country: string; currency: string; created_at: string };
 
 const ago = (iso: string) => {
@@ -65,7 +65,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
   const PlanForm = ({ b }: { b: Biz }) => (
     <form action={setPlan} className="flex gap-1.5">
       <input type="hidden" name="id" value={b.id} />
-      <select name="plan" className="input h-9 text-xs w-32" defaultValue="pro1"><option value="pro1">+1 month Pro</option><option value="pro12">+12 months Pro</option><option value="free">Set Free</option></select>
+      <select name="plan" className="input h-9 text-xs w-32" defaultValue="pro1"><option value="pro1">+1 month Pro</option><option value="pro12">+12 months Pro</option><option value="ai1">+1 month AI</option><option value="ai12">+12 months AI</option><option value="free">Set Free</option></select>
       <button className="btn-ghost h-9 text-xs px-3">Set</button>
     </form>
   );
@@ -100,7 +100,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
                       <div className="flex-1 min-w-0">
                         <div className="font-bold">{b?.name ?? "—"} <span className="text-muted font-normal text-sm">/{b?.slug}</span></div>
                         <div className="text-sm text-muted">{b?.address ?? ""}</div>
-                        <div className="text-sm mt-1">Pro · {r.months === 12 ? "12 months" : "1 month"} · <b>{formatMoney(Number(r.amount), r.currency)}</b> · <b className="text-brand">{r.reference}</b> · <span className="text-muted">{ago(r.created_at)}</span></div>
+                        <div className="text-sm mt-1">{r.plan === "ai" ? "AI" : "Pro"} · {r.months === 12 ? "12 months" : "1 month"} · <b>{formatMoney(Number(r.amount), r.currency)}</b> · <b className="text-brand">{r.reference}</b> · <span className="text-muted">{ago(r.created_at)}</span></div>
                       </div>
                       <div className="flex flex-wrap gap-2 items-center">
                         <form action={approvePayment.bind(null, r.id)}><button className="btn h-10 bg-green-600 text-sm">✓ Activate</button></form>
