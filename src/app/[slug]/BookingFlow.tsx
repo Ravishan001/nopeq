@@ -132,7 +132,7 @@ export function BookingFlow({ businessId, sections, services, staff, branches, c
       catch { res = { error: "generic" }; }
       if (res.token) router.push(`/b/${res.token}?new=1`);
       else {
-        setError(t(res.error === "slot_taken" ? "err_slot_taken" : res.error === "too_many" ? "err_too_many" : res.error === "phone" ? "err_phone" : "err_generic"));
+        setError(res.error === "limit" ? (si ? "මේ මාසේ online booking පිරිලා. Call / WhatsApp කරන්න." : "Online booking is full this month. Please call / WhatsApp.") : t(res.error === "slot_taken" ? "err_slot_taken" : res.error === "too_many" ? "err_too_many" : res.error === "phone" ? "err_phone" : "err_generic"));
         if (res.error === "slot_taken") startSlots(async () => setSlots(await getSlots(businessId, date, service.id, staffId)));
       }
     });

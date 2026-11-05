@@ -65,7 +65,7 @@ export async function book(input: z.infer<typeof bookingSchema>): Promise<{ toke
   });
   if (error) {
     const m = error.message;
-    return { error: m.includes("slot_taken") ? "slot_taken" : m.includes("too_many") ? "too_many" : "generic" };
+    return { error: m.includes("slot_taken") ? "slot_taken" : m.includes("too_many") ? "too_many" : m.includes("limit_reached") ? "limit" : "generic" };
   }
   const token = data as string;
   // tattoo / nails: reference photos + placement (only links to our own upload folder)

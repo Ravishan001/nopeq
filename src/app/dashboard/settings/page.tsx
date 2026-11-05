@@ -4,6 +4,11 @@ import { getT } from "@/lib/lang";
 import { WEEKDAYS, type TKey } from "@/lib/i18n";
 import { addBranch, addStaff, deleteService, removeBranch, removeStaff, saveHours, saveRules, saveStaffInfo, setServiceImages, setStaffPortfolio, upsertService } from "../actions";
 import { OwnerPhotos } from "./OwnerPhotos";
+import { Upgrade } from "./Upgrade";
+import { Reinstall } from "./Reinstall";
+import { saveBrand } from "../billing-actions";
+import { FREE_LIMIT, effectivePlan, fmtDate, monthUsage, upgradePrice } from "@/lib/plan";
+import { formatMoney } from "@/lib/countries";
 import { KINDS, getKind, readOptions } from "@/lib/templates";
 import { MediaUpload } from "./MediaUpload";
 import { currencySymbol } from "@/lib/countries";
@@ -12,7 +17,7 @@ import { PasswordForm } from "./PasswordForm";
 import { setNotifyPrefs } from "../notify-actions";
 
 export const metadata = { title: "Settings" };
-const ALL_TABS = ["profile", "services", "staff", "hours", "rules", "branches", "account"] as const;
+const ALL_TABS = ["profile", "services", "staff", "hours", "rules", "branches", "plan", "account"] as const;
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { supabase, business, user } = await requireBusiness();
@@ -27,7 +32,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     <div>
       <div className="flex gap-2 mb-6 overflow-x-auto">
         {TABS.map((x) => (
-          <Link key={x} href={`?tab=${x}`} className={`chip whitespace-nowrap ${tab === x ? "chip-on" : ""}`}>{x === "services" && orders ? "Products" : x === "rules" ? (orders ? (si ? "Order rules" : "Order rules") : (si ? "Booking rules" : "Booking rules")) : x === "staff" && kind.staffWord ? `${kind.staffWord[lang]}s` : t(`tab_${x}` as TKey)}</Link>
+          <Link key={x} href={`?tab=${x}`} className={`chip whitespace-nowrap ${tab === x ? "chip-on" : ""}`}>{x === "plan" ? (effectivePlan(business) === "free" ? "⭐ Plan" : "⭐ Pro") : x === "services" && orders ? "Products" : x === "rules" ? (orders ? (si ? "Order rules" : "Order rules") : (si ? "Booking rules" : "Booking rules")) : x === "staff" && kind.staffWord ? `${kind.staffWord[lang]}s` : t(`tab_${x}` as TKey)}</Link>
         ))}
       </div>
 
@@ -45,6 +50,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       {tab === "staff" && <Staff />}
       {tab === "hours" && <Hours />}
       {tab === "rules" && <Rules />}
+      {tab === "plan" && <Plan />}
       {tab === "branches" && <Branches />}
       {tab === "account" && (
         <div className="space-y-6">
@@ -124,6 +130,90 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <input name="name" required className="input" placeholder={t("add_staff")} />
           <button className="btn">+ {t("add")}</button>
         </form>
+      </div>
+    );
+  }
+
+  async function Plan() {
+    const plan = effectivePlan(business);
+    const money = (n: number, c = business.currency) => formatMoney(n, c, si ? "si-LK" : "en");
+    const p1 = upgradePrice(business.currency, 1), p12 = upgradePrice(business.currency, 12);
+    const [usage, bank, reqs] = await Promise.all([
+      monthUsage(supabase, business.id),
+      supabase.from("billing_settings").select("account_name, bank, branch, account_no, note").eq("id", 1).maybeSingle(),
+      supabase.from("payment_requests").select("reference, months, amount, currency, status, slip_path, admin_note, created_at").eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
+    ]);
+    if (usage === null) return <div className="card p-6 max-w-xl text-sm">⚠️ {si ? "මුලින් Supabase එකේ 008_plans_billing.sql එක run කරන්න." : "Run 008_plans_billing.sql in Supabase first."}</div>;
+    const list = (reqs.data ?? []) as { reference: string; months: number; amount: number; currency: string; status: string; slip_path: string | null; admin_note: string | null; created_at: string }[];
+    const waiting = list.find((r) => r.status === "pending" && r.slip_path);
+    const open = list.find((r) => r.status === "pending" && !r.slip_path);
+    const rejected = list.find((r) => r.status === "rejected");
+    const feat = (ok: boolean, text: string) => <li className={`flex gap-2 ${ok ? "" : "text-muted"}`}><span className={ok ? "text-green-500 font-bold" : ""}>{ok ? "✓" : "–"}</span>{text}</li>;
+    return (
+      <div className="max-w-3xl space-y-4">
+        <div className="card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display font-bold text-xl">{si ? "Plan සහ billing" : "Plans & billing"}</h2>
+              <p className="text-sm text-muted">{plan === "free" ? <>{si ? "දැන් ඉන්නේ" : "You're on"} <b className="text-fg">Free</b> · {usage} / {FREE_LIMIT} {si ? "මේ මාසේ" : "this month"}</> : <>{si ? "Pro active" : "Pro active"} · {si ? "ඉවර වෙන්නේ" : "until"} <b className="text-fg">{business.plan_until ? fmtDate(business.plan_until) : "—"}</b></>}</p>
+            </div>
+            <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${plan === "free" ? "bg-black/5 dark:bg-white/10 text-muted" : "bg-brand text-white"}`}>{plan.toUpperCase()}</span>
+          </div>
+          {plan === "free" && (
+            <div className="h-2.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden mt-3"><div className={`h-full rounded-full ${usage >= FREE_LIMIT ? "bg-red-500" : "bg-gradient-to-r from-amber-500 to-brand"}`} style={{ width: `${Math.min(100, (usage / FREE_LIMIT) * 100)}%` }} /></div>
+          )}
+        </div>
+
+        {plan !== "free" ? (
+          <>
+            <div className="card p-5 bg-green-500/5 border-green-500/40 text-center">
+              <div className="text-3xl">🎉</div>
+              <div className="font-display font-bold text-lg">{si ? "ඔයා Pro!" : "You're on Pro!"}</div>
+              <p className="text-sm text-muted">{si ? "Unlimited bookings · ඔයාගේ logo එක app icon එක" : "Unlimited bookings · your logo as the app icon"}</p>
+              <p className="text-xs text-muted mt-2">{si ? "කලින් renew කරන්න පහළින් ගෙවන්න පුළුවන්. දවස් එකතු වෙනවා." : "You can renew early below — the time is added on."}</p>
+            </div>
+            <div className="card p-5"><h3 className="font-display font-bold mb-3">📲 {si ? "අලුත් app icon එක ගන්න" : "Get your new app icon"}</h3><Reinstall logo={business.logo_url} name={business.name} si={si} /></div>
+            <form action={saveBrand} className="card p-5 space-y-4">
+              <h3 className="font-display font-bold">🎨 {si ? "Booking page එකේ look එක" : "Booking page look"}</h3>
+              <label className="flex items-center gap-3"><input type="color" name="brand_color" defaultValue={business.brand_color ?? "#F0521F"} className="h-11 w-16 rounded-lg border border-line bg-card" /><span className="text-sm">{si ? "Brand පාට (buttons, tabs)" : "Brand colour (buttons, tabs)"}</span></label>
+              <label className="flex items-center gap-3 text-sm"><input type="checkbox" name="hide_branding" defaultChecked={!!business.hide_branding} className="size-5 accent-[#F0521F]" />{si ? "“powered by NopeQ” අයින් කරන්න" : "Hide “powered by NopeQ”"}</label>
+              <div className="flex gap-2"><button className="btn h-10">{t("save")}</button><Link href="/dashboard/report" className="btn-ghost h-10 text-sm">📊 Monthly report</Link></div>
+            </form>
+          </>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-3">
+            <div className="card p-4">
+              <div className="flex justify-between items-baseline"><b className="font-display text-lg">Free</b><b className="font-display">{money(0)}</b></div>
+              <ul className="text-sm space-y-1.5 mt-3">{feat(true, si ? "Booking page + QR" : "Booking page + QR")}{feat(true, si ? `මාසෙට bookings / orders ${FREE_LIMIT}` : `${FREE_LIMIT} bookings / orders a month`)}{feat(true, "Push notifications")}{feat(false, si ? "NopeQ app icon" : "NopeQ app icon")}</ul>
+              <div className="btn-ghost h-9 w-full text-sm mt-4 pointer-events-none">{si ? "දැන් තියෙන plan එක" : "Current plan"}</div>
+            </div>
+            <div className="card p-4 border-2 border-brand bg-soft relative">
+              <span className="absolute -top-2.5 right-3 bg-brand text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">MOST POPULAR</span>
+              <div className="flex justify-between items-baseline"><b className="font-display text-lg text-brand">Pro</b><b className="font-display">{money(p1.monthly, p1.currency)}<span className="text-xs text-muted font-sans"> /{si ? "මාසෙට" : "month"}</span></b></div>
+              <ul className="text-sm space-y-1.5 mt-3">{feat(true, si ? "Unlimited bookings & orders" : "Unlimited bookings & orders")}{feat(true, si ? "ඔයාගේ logo එක app icon එක" : "Your logo as the app icon")}{feat(true, si ? "Customers ලට ඔයාගේ page එක app එකක් වගේ" : "Customers add your page as an app")}{feat(true, si ? "Brand පාට" : "Your brand colour")}{feat(true, si ? "“powered by NopeQ” අයින් කරන්න" : "Remove “powered by NopeQ”")}{feat(true, si ? "Monthly report" : "Monthly report")}</ul>
+            </div>
+            <div className="card p-4 opacity-70">
+              <div className="flex justify-between items-baseline"><b className="font-display text-lg text-violet-500">AI</b><b className="font-display">{money(p1.ai, p1.currency)}<span className="text-xs text-muted font-sans"> /{si ? "මාසෙට" : "month"}</span></b></div>
+              <ul className="text-sm space-y-1.5 mt-3">{feat(true, si ? "Pro එකේ ඔක්කොම" : "Everything in Pro")}{feat(true, "AI agent · web + WhatsApp")}</ul>
+              <span className="inline-block mt-4 text-xs font-bold px-2 py-1 rounded-full bg-violet-500/15 text-violet-500">Coming soon</span>
+            </div>
+          </div>
+        )}
+
+        <div className="card p-5">
+          <h3 className="font-display font-bold mb-3">{plan === "free" ? (si ? "⭐ Pro එකට upgrade වෙන්න" : "⭐ Upgrade to Pro") : (si ? "Renew කරන්න" : "Renew")}</h3>
+          {rejected && !waiting && !open && <div className="rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-sm p-3 mb-3">✕ {si ? "කලින් payment එක reject වුණා" : "Your last payment was rejected"} ({rejected.reference}){rejected.admin_note ? ` · ${rejected.admin_note}` : ""}</div>}
+          {waiting ? (
+            <div className="rounded-2xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm">
+              ⏳ <b>{si ? "Activate කරනකම් ඉන්නවා" : "Waiting for activation"}</b> · {waiting.reference} · {money(Number(waiting.amount), waiting.currency)}
+              <p className="text-muted mt-1">{si ? "සාමාන්‍යයෙන් පැය කීපයකින් activate කරනවා. Notification එකක් එයි." : "We usually activate within a few hours. You'll get a notification."}</p>
+            </div>
+          ) : (
+            <Upgrade prices={{ m1: p1.amount, m12: p12.amount }} currency={p1.currency} userId={user.id} si={si}
+              bank={bank.data ?? { account_name: "Ravion Studio", bank: null, branch: null, account_no: null, note: null }}
+              open={open ? { reference: open.reference, months: open.months, amount: Number(open.amount), currency: open.currency } : null} />
+          )}
+        </div>
       </div>
     );
   }

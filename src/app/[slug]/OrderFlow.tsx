@@ -114,6 +114,7 @@ export function OrderFlow({ businessId, kind, icon, sections, products, openDays
       } catch { r = { error: "generic" }; }
       if (r.token) { router.push(`/o/${r.token}?new=1`); return; }
       const msg: Record<string, [string, string]> = {
+        limit_reached: ["මේ මාසේ online orders පිරිලා. Shop එකට call / WhatsApp කරන්න.", "Online orders are full this month. Please call / WhatsApp the shop."],
         day_full: ["ඒ දවස දැන් පිරිලා. වෙන දවසක් තෝරන්න.", "That day just filled up. Please pick another day."],
         too_soon: ["ඒ දවසට order කරන්න පරක්කු වැඩියි.", "That day is too soon to order."],
         closed: ["ඒ දවසේ shop එක වහලා.", "The shop is closed that day."],

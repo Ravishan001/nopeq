@@ -12,6 +12,8 @@ export type Business = {
   // migration 007 (may be missing on older databases → treat as a salon)
   mode?: "slots" | "orders"; daily_limit?: number; lead_days?: number; delivery_fee?: number | null;
   advance_pct?: number; deposit_amount?: number; prep_note?: string | null;
+  // migration 008
+  plan_until?: string | null; brand_color?: string | null; hide_branding?: boolean;
 };
 
 /** The logged-in owner's business. Redirects to /login or /onboarding when missing. */

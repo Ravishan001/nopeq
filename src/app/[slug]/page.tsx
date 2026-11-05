@@ -12,6 +12,7 @@ import { todayIn, weekdayOf } from "@/lib/time";
 import { BookingFlow } from "./BookingFlow";
 import { OrderFlow } from "./OrderFlow";
 import { getKind } from "@/lib/templates";
+import { isPro } from "@/lib/plan";
 
 async function load(slug: string) {
   if (RESERVED_SLUGS.has(slug) || !/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) return null;
@@ -20,30 +21,35 @@ async function load(slug: string) {
     .select("*") // newer columns (mode, rules) may not exist before migration 007
     .eq("slug", slug).eq("is_published", true).maybeSingle();
   if (!b) return null;
-  const [services, staff, branches, hours] = await Promise.all([
+  const [services, staff, branches, hours, full] = await Promise.all([
     supabase.from("services").select("*").eq("business_id", b.id).eq("active", true).order("sort"),
     supabase.from("staff").select("*").eq("business_id", b.id).eq("active", true).order("created_at"),
     supabase.from("branches").select("id, name").eq("business_id", b.id).order("created_at"),
     supabase.from("business_hours").select("weekday, is_open, open_time, close_time").eq("business_id", b.id),
+    supabase.rpc("limit_reached", { p_business: b.id }),
   ]);
   type Svc = { id: string; name: string; section: string | null; price: number; duration_min: number; description?: string | null; image_url?: string | null; options?: unknown };
   type Stf = { id: string; name: string; specialty?: string | null; portfolio?: string[] | null };
   return {
-    b: b as typeof b & { type?: string; mode?: string; daily_limit?: number; lead_days?: number; delivery_fee?: number | null; advance_pct?: number; deposit_amount?: number; prep_note?: string | null },
+    b: b as typeof b & { plan: string; plan_until?: string | null; brand_color?: string | null; hide_branding?: boolean; type?: string; mode?: string; daily_limit?: number; lead_days?: number; delivery_fee?: number | null; advance_pct?: number; deposit_amount?: number; prep_note?: string | null },
     services: ((services.data ?? []) as Svc[]).map((x) => ({ id: x.id, name: x.name, section: x.section, price: Number(x.price), duration_min: x.duration_min, description: x.description ?? null, image_url: x.image_url ?? null, options: x.options ?? {} })),
     staff: ((staff.data ?? []) as Stf[]).map((x) => ({ id: x.id, name: x.name, specialty: x.specialty ?? null, portfolio: x.portfolio ?? [] })),
-    branches: branches.data ?? [], hours: hours.data ?? [],
+    branches: branches.data ?? [], hours: hours.data ?? [], full: full.data === true,
   };
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const d = await load((await params).slug);
   if (!d) return { title: "Not found" };
+  const pro = isPro(d.b);
   return {
     title: d.b.name,
     description: `${d.b.name} — book online in seconds. No login needed.`,
     openGraph: { title: d.b.name, images: d.b.cover_url ? [d.b.cover_url] : undefined },
-    icons: d.b.logo_url ? { icon: d.b.logo_url, apple: d.b.logo_url } : undefined,
+    // customers can add the booking page to their home screen; Pro gets the business logo as the icon
+    manifest: `/api/manifest/${d.b.slug}?for=book`,
+    icons: d.b.logo_url ? { icon: d.b.logo_url, apple: pro ? `/api/icon/${d.b.slug}?s=180` : "/icons/apple-touch-icon-180.png" } : undefined,
+    appleWebApp: { capable: true, title: d.b.name, statusBarStyle: "default" },
   };
 }
 
@@ -70,6 +76,8 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
   const si = lang === "si";
   const dial = getCountry(b.country).dial;
   const kind = getKind(b.type);
+  const pro = isPro(b);
+  const brandStyle = pro && b.brand_color ? ({ "--color-brand": b.brand_color, "--color-brand-glow": b.brand_color } as React.CSSProperties) : undefined;
   const orders = b.mode === "orders";
   const wa = (b.whatsapp || b.phone || "").replace(/\D/g, "").replace(/^0/, dial);
 
@@ -122,7 +130,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
   );
 
   return (
-    <div className="min-h-dvh pb-28 overflow-x-clip">
+    <div className="min-h-dvh pb-28 overflow-x-clip" style={brandStyle}>
       {/* cover */}
       <div className="relative h-56 sm:h-72 bg-gradient-to-br from-ink via-[#1E2541] to-[#3a2a4a] overflow-hidden">
         {b.cover_url && <img src={b.cover_url} alt="" className="absolute inset-0 size-full object-cover" />}
@@ -167,7 +175,17 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
             <h2 className="font-display font-bold text-2xl sm:text-3xl tracking-tight">{orders ? (si ? "Online order කරන්න" : "Order online") : t("book_title")}</h2>
             <p className="text-muted mt-1">{t("no_login")}</p>
             <div className="mt-6">
-              {d.services.length && orders ? (
+              {d.full ? (
+                <div className="card p-8 text-center">
+                  <div className="text-4xl">📅</div>
+                  <h3 className="font-display font-bold text-xl mt-2">{orders ? (si ? "මේ මාසේ online orders පිරිලා" : "Online orders are full for this month") : (si ? "මේ මාසේ online booking පිරිලා" : "Online booking is full for this month")}</h3>
+                  <p className="text-muted mt-2">{si ? "Call හරි WhatsApp හරි කරලා book කරන්න — අපි වෙලාවක් දෙන්නම්." : "Please call or WhatsApp us to book — we'll fit you in."}</p>
+                  <div className="grid sm:grid-cols-2 gap-2 mt-5 max-w-sm mx-auto">
+                    {wa && <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="btn bg-green-600">💬 WhatsApp</a>}
+                    {b.phone && <a href={`tel:${b.phone}`} className="btn-ghost">📞 {si ? "Call" : "Call"}</a>}
+                  </div>
+                </div>
+              ) : d.services.length && orders ? (
                 <OrderFlow businessId={b.id} kind={kind.id} icon={kind.icon} sections={b.sections} products={d.services}
                   openDays={d.hours.filter((x) => x.is_open).map((x) => x.weekday)}
                   rules={{ dailyLimit: b.daily_limit ?? 6, leadDays: b.lead_days ?? 1, deliveryFee: b.delivery_fee == null ? null : Number(b.delivery_fee), advancePct: b.advance_pct ?? 0 }}
@@ -183,10 +201,10 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
           <aside className="min-w-0 lg:sticky lg:top-6 h-fit">{InfoCard}</aside>
         </div>
 
-        <div className="mt-16 flex flex-col items-center gap-1 text-xs text-muted">
+        {!(pro && b.hide_branding) && <div className="mt-16 flex flex-col items-center gap-1 text-xs text-muted">
           <Link href="/" className="opacity-70 hover:opacity-100"><Wordmark size={18} /></Link>
           <span>powered by Ravion Studio</span>
-        </div>
+        </div>}
       </main>
     </div>
   );

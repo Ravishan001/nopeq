@@ -5,6 +5,20 @@ import { getT } from "@/lib/lang";
 import { signOut } from "./actions";
 import { InstallButton } from "@/components/InstallButton";
 
+import type { Metadata } from "next";
+import { isPro } from "@/lib/plan";
+
+/** Pro: the installed dashboard app uses the business name + logo icon. */
+export async function generateMetadata(): Promise<Metadata> {
+  const { business } = await requireBusiness();
+  if (!isPro(business)) return {};
+  return {
+    manifest: `/api/manifest/${business.slug}?for=dash`,
+    icons: { icon: "/icons/favicon.svg", apple: `/api/icon/${business.slug}?s=180` },
+    appleWebApp: { capable: true, title: business.name, statusBarStyle: "default" },
+  };
+}
+
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
   const { business } = await requireBusiness();
   const { t } = await getT();

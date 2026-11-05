@@ -47,7 +47,7 @@ export async function placeOrder(input: z.infer<typeof orderSchema>): Promise<{ 
   });
   if (error) {
     const m = error.message;
-    const known = ["day_full", "too_soon", "closed", "too_many", "address", "bad_size", "bad_flavour"].find((k) => m.includes(k));
+    const known = ["limit_reached", "day_full", "too_soon", "closed", "too_many", "address", "bad_size", "bad_flavour"].find((k) => m.includes(k));
     if (!known) console.error("place_order", m);
     return { error: known ?? "generic" };
   }

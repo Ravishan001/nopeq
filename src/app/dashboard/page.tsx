@@ -12,6 +12,8 @@ import { getBoard, type BoardData } from "./board-actions";
 import { OrderCalendar } from "@/components/OrderCalendar";
 import { getDayOrders, getMonth, getOrderStats } from "./order-actions";
 import { getKind } from "@/lib/templates";
+import { FREE_LIMIT, WARN_AT, effectivePlan, monthUsage, upgradePrice } from "@/lib/plan";
+import { formatMoney } from "@/lib/countries";
 
 export const metadata = { title: "Dashboard" };
 
@@ -25,13 +27,30 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const today = todayIn(business.timezone);
   const focusDay = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : today;
 
-  const [svc, stf, hrs, board, od] = await Promise.all([
+  const [svc, stf, hrs, board, od, usage] = await Promise.all([
     supabase.from("services").select("*").eq("business_id", business.id).eq("active", true).order("sort"),
     supabase.from("staff").select("id, name").eq("business_id", business.id).eq("active", true).order("created_at"),
     supabase.from("business_hours").select("weekday").eq("business_id", business.id).eq("is_open", true),
     orders ? Promise.resolve<BoardData>({ date: today, open: null, close: null, items: [] }) : getBoard(today),
     orders ? Promise.all([getMonth(focusDay.slice(0, 7)), getDayOrders(focusDay), getOrderStats()]) : Promise.resolve(null),
+    monthUsage(supabase, business.id),
   ]);
+  const plan = effectivePlan(business);
+  const showUsage = plan === "free" && usage !== null && usage >= WARN_AT;
+  const full = usage !== null && usage >= FREE_LIMIT;
+  const Usage = showUsage ? (
+    <div className={`card p-4 border-[1.5px] ${full ? "border-red-500 bg-red-500/5" : "border-brand bg-soft"}`}>
+      <div className="flex items-center justify-between gap-3">
+        <b className="font-display">{si ? "මේ මාසේ" : "This month"} · {usage} / {FREE_LIMIT}</b>
+        <span className={`text-xs font-extrabold ${full ? "text-red-500" : "text-amber-600 dark:text-amber-400"}`}>{full ? (si ? "පිරිලා" : "Full") : `${FREE_LIMIT - usage!} ${si ? "ඉතුරුයි" : "left"}`}</span>
+      </div>
+      <div className="h-2.5 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden mt-2"><div className={`h-full rounded-full ${full ? "bg-red-500" : "bg-gradient-to-r from-amber-500 to-brand"}`} style={{ width: `${Math.min(100, (usage! / FREE_LIMIT) * 100)}%` }} /></div>
+      <p className="text-xs text-muted mt-2">{full
+        ? (si ? "Online bookings ලබන මාසෙ 1 වෙනිදා වෙනකම් නවත්තලා. Walk-ins / phone orders ඔයාට දාන්න පුළුවන්." : "Online bookings are paused until the 1st. You can still add walk-ins / phone orders yourself.")
+        : (si ? `${FREE_LIMIT} වුණාම online bookings නවතිනවා. Pro = unlimited.` : `Online bookings stop at ${FREE_LIMIT}. Pro = unlimited.`)}</p>
+      <Link href="/dashboard/settings?tab=plan" className="btn w-full h-11 text-sm mt-3">⭐ {si ? "Pro එකට upgrade" : "Upgrade to Pro"} · {formatMoney(upgradePrice(business.currency, 1).amount, upgradePrice(business.currency, 1).currency)}/{si ? "මාසෙට" : "mo"}</Link>
+    </div>
+  ) : null;
   const services = ((svc.data ?? []) as { id: string; name: string; duration_min: number; price: number; options?: unknown }[])
     .map((s) => ({ id: s.id, name: s.name, duration_min: s.duration_min, price: Number(s.price), options: s.options ?? {} }));
   const openDays = (hrs.data ?? []).map((h) => h.weekday as number);
@@ -112,6 +131,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             <div className="text-muted text-sm">Page එක live! / Your page is live!</div>
           </div>
         )}
+        {Usage}
         <div className="lg:hidden">{BizCard}</div>
         <div>
           <h2 className="text-xs font-extrabold uppercase tracking-wider text-muted mb-2 px-1">{orders ? (si ? "Orders calendar" : "Orders calendar") : si ? "අද slots" : "Today's slots"}</h2>
@@ -132,6 +152,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
       <aside className="hidden lg:block space-y-4">
         {BizCard}
+        {plan !== "free" && <Link href="/dashboard/report" className="card p-4 flex items-center gap-3 hover:border-brand/50 transition"><span className="text-2xl">📊</span><span className="flex-1"><b className="font-display">{si ? "Monthly report" : "Monthly report"}</b><span className="block text-xs text-muted">{si ? "Bookings, revenue, හොඳම services" : "Bookings, revenue, top services"}</span></span><span className="text-brand font-bold">→</span></Link>}
         <QrCard url={url} name={business.name} />
         {Alerts}
         {!orders && <div className="card p-4">
