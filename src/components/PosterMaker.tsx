@@ -28,6 +28,23 @@ function fit(ctx: CanvasRenderingContext2D, text: string, font: (px: number) => 
   while (ctx.measureText(text).width > max && px > 20) { px -= 2; ctx.font = font(px); }
   return px;
 }
+// Some phones (system Sinhala fallback fonts) report a wrong measureText width, so
+// canvas "center" alignment drifts right and the line gets cut off. Draw the line on a
+// scratch canvas, find where the ink really is, then place that centred and scaled to fit.
+function inkCentered(ctx: CanvasRenderingContext2D, text: string, font: string, color: string, cx: number, y: number, size: number, maxW: number) {
+  const pad = Math.ceil(size * 0.6), w = Math.ceil(size * text.length * 1.2) + pad * 2, h = Math.ceil(size * 2.2);
+  const s = document.createElement("canvas"); s.width = w; s.height = h;
+  const sc = s.getContext("2d", { willReadFrequently: true })!;
+  sc.font = font; sc.fillStyle = color; sc.textAlign = "left"; sc.textBaseline = "alphabetic";
+  const base = Math.round(size * 1.5);
+  sc.fillText(text, pad, base);
+  const d = sc.getImageData(0, 0, w, h).data;
+  let x0 = w, x1 = -1;
+  for (let x = 0; x < w; x++) for (let yy = 0; yy < h; yy++) if (d[(yy * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; x1 = x; break; }
+  if (x1 < 0) { ctx.font = font; ctx.fillStyle = color; ctx.fillText(text, cx, y); return; }
+  const inkW = x1 - x0 + 1, k = Math.min(1, maxW / inkW);
+  ctx.drawImage(s, x0, 0, inkW, h, cx - (inkW * k) / 2, y - base * k, inkW * k, h * k);
+}
 const load = (src: string) => new Promise<HTMLImageElement | null>((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 
 /** Ready-made shop-front poster: logo, name, "Scan to book", QR with the logo in the middle. Download as PNG or print. */
@@ -79,11 +96,10 @@ export function PosterMaker({ p }: { p: PosterInfo }) {
     ctx.restore();
     y += L + S.gName;
     ctx.fillStyle = t.fg;
-    fit(ctx, p.name, (px) => `700 ${px}px Sora, "Noto Sans Sinhala", sans-serif`, S.name, W - 160);
-    ctx.fillText(p.name, W / 2, y);
+    const namePx = fit(ctx, p.name, (px) => `700 ${px}px Sora, "Noto Sans Sinhala", sans-serif`, S.name, W - 160);
+    inkCentered(ctx, p.name, `700 ${namePx}px Sora, "Noto Sans Sinhala", sans-serif`, t.fg, W / 2, y, namePx, W - 160);
     y += S.gTag;
-    ctx.fillStyle = t.mu; ctx.font = `500 ${S.tag}px Inter, "Noto Sans Sinhala", sans-serif`;
-    ctx.fillText(p.tagline, W / 2, y);
+    inkCentered(ctx, p.tagline, `500 ${S.tag}px Inter, "Noto Sans Sinhala", sans-serif`, t.mu, W / 2, y, S.tag, W - 160);
 
     // headline
     y += S.gHead;
@@ -91,9 +107,9 @@ export function PosterMaker({ p }: { p: PosterInfo }) {
     fit(ctx, p.orders ? "Scan to order" : "Scan to book", (px) => `700 ${px}px Sora, sans-serif`, S.head, W - 140);
     ctx.fillText(p.orders ? "Scan to order" : "Scan to book", W / 2, y);
     y += S.gSin;
-    ctx.fillStyle = theme === "brand" ? "#ffffff" : p.color;
-    ctx.font = `700 ${S.sin}px "Noto Sans Sinhala", Inter, sans-serif`;
-    ctx.fillText(p.orders ? "Scan කරලා order කරන්න" : "Scan කරලා book කරන්න", W / 2, y);
+    inkCentered(ctx, p.orders ? "Scan කරලා order කරන්න" : "Scan කරලා book කරන්න",
+      `700 ${S.sin}px "Noto Sans Sinhala", "Iskoola Pota", Inter, sans-serif`,
+      theme === "brand" ? "#ffffff" : p.color, W / 2, y, S.sin, W - 200);
 
     // QR card
     const Q = S.qr, pad = S.pad;
