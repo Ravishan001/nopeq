@@ -31,11 +31,11 @@ export async function GET(req: Request) {
   return out({ on: true, messages: (data ?? []) as Row[] });
 }
 
-const body = z.object({ slug: z.string(), token: z.string().optional(), message: z.string().trim().min(1).max(600) });
+const body = z.object({ slug: z.string(), token: z.string().nullish(), message: z.string().trim().min(1).max(600) });
 
 export async function POST(req: Request) {
   const p = body.safeParse(await req.json().catch(() => null));
-  if (!p.success) return out({ error: "invalid" }, 400);
+  if (!p.success) return out({ error: "invalid", reason: "invalid" }, 400);
   const x = await loadBiz(p.data.slug);
   if (!x || !aiOn(x.b)) return out({ error: "off" }, 403);
   const { db, b } = x;
