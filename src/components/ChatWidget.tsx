@@ -25,7 +25,7 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
 
   const load = useCallback(async (t: string) => {
     const r = await fetch(`/api/ai/chat?slug=${slug}&token=${t}`).then((x) => x.json()).catch(() => null);
-    if (r?.messages) setMsgs(r.messages);
+    if (r?.messages) setMsgs((prev) => (r.messages.length >= prev.length && JSON.stringify(r.messages) !== JSON.stringify(prev) ? r.messages : prev));
   }, [slug]);
 
   useEffect(() => { const t = read(slug); if (t) { setToken(t); load(t); } }, [slug, load]);
@@ -35,7 +35,18 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
     const id = setInterval(() => load(token), 12000);
     return () => clearInterval(id);
   }, [open, token, load]);
-  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, busy, open]);
+  // Scroll down only when something new arrives and the reader is already near the bottom
+  // (the 12-second refresh must not yank them down while they read older messages).
+  const list = useRef<HTMLDivElement>(null);
+  const seen = useRef(0);
+  useEffect(() => {
+    const el = list.current;
+    const grew = msgs.length > seen.current;
+    seen.current = msgs.length;
+    const near = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if ((grew || busy) && near) end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [msgs, busy]);
+  useEffect(() => { if (open) requestAnimationFrame(() => end.current?.scrollIntoView({ block: "end" })); }, [open]);
 
   // Phones: fit the chat to the part of the screen the keyboard leaves free, and stop the
   // page behind it from scrolling, so the box and the send button don't jump around.
@@ -61,6 +72,7 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
     setErr(null);
     setText("");
     setMsgs((x) => [...x, { role: "user", content: message }]);
+    requestAnimationFrame(() => end.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
     setBusy(true);
     try {
       const r = await fetch("/api/ai/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, token, message }) });
@@ -91,7 +103,7 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
             <div className="min-w-0 flex-1"><div className="font-display font-bold truncate">{name}</div><div className="text-xs text-green-600 dark:text-green-400 font-semibold">● {si ? "AI assistant · ඉක්මනින් reply කරනවා" : "AI assistant · replies instantly"}</div></div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="size-9 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-lg">✕</button>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2">
+          <div ref={list} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2">
             {shown.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className="max-w-[85%] space-y-1.5">
