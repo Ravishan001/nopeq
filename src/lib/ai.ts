@@ -72,7 +72,8 @@ export function systemPrompt(b: Biz, ctx: Awaited<ReturnType<typeof loadContext>
     customer "appointment ekak daganna puluwanda?" → GOOD "Ow, puluwan! 😊 Mokakda karaganna one?"  BAD "Ow, puluwanda!"  ("puluwanda" = can I?, "puluwan" = yes you can)
     taken time → GOOD "Sorry, 4:00 PM eka dan book wela 😕 Langama free welawal 3:00 PM saha 5:00 PM — eken ekak hari?" + those times as buttons. Use simple everyday Singlish, never bookish words like "samawenna", "gannata ba", "hamaya".
   Common words: heta/හෙට = tomorrow, anidda/අනිද්දා = day after tomorrow, ada/අද = today, udeta/උදේ = morning, dawal/දවල් = noon, hawasa/හවස = afternoon/evening, ra/රෑ = night, welawa/වෙලාව = time.`;
-  const tone = b.ai_tone === "formal" ? "polite and formal" : b.ai_tone === "short" ? "very short and to the point" : "warm and friendly, a little emoji is fine";
+  const tone = (b.ai_tone === "formal" ? "polite and formal" : b.ai_tone === "short" ? "very short and to the point" : "warm and friendly, a little emoji is fine")
+    + ". Always professional, like a good receptionist at a real shop: never call the customer ayye, akke, malli, nangi, machan, bro, sis, dear or similar, and no slang or jokes. Use their name once you know it";
   const rules = orders
     ? `Orders: customers pick a product (+ size/flavour if listed) and a DAY, not a time. Max ${b.daily_limit ?? 6} orders a day, order at least ${b.lead_days ?? 1} day(s) ahead. ${b.delivery_fee != null ? `Delivery costs ${money(Number(b.delivery_fee))} extra; pickup is free.` : "Pickup only (no delivery)."}${(b.advance_pct ?? 0) > 0 ? ` An advance of ${b.advance_pct}% confirms the order; the shop tells the customer how to pay.` : ""}`
     : `Appointments: customers pick a service, optionally a ${kind.staffWord?.en.toLowerCase() ?? "staff member"}, a date and a start time.${(b.deposit_amount ?? 0) > 0 ? ` A deposit of ${money(Number(b.deposit_amount))} confirms the booking; the shop tells the customer how to pay.` : ""}${b.prep_note ? ` Before coming: ${b.prep_note}` : ""}`;
@@ -127,6 +128,8 @@ HOW TO WORK:
 - TIMES: free_times from find_free_times is the full truth. If the customer asks for a specific time (e.g. "4 ta puluwanda?", "4pm?"), check it is in free_times. If it is → "Ow, 4:00 PM free!" and continue. If it is NOT → say honestly that it's taken/not available and offer the 2–3 closest free times. Never say yes to a time that isn't in free_times. "4" alone at a salon means 4 PM.
 - As soon as you know the service and the day, call ${orders ? "order_days" : "find_free_times"} right away and offer real times — don't ask "morning or evening?" first.
 - Use ✅ only after the ${orders ? "order" : "booking"} tool succeeded.
+- When you need the day, offer it as buttons, e.g. Singlish [[buttons: Ada | Heta | Anidda]] / English [[buttons: Today | Tomorrow | Day after]].
+- Phone numbers in Sri Lanka have 10 digits (mobile 07X XXX XXXX). If the number looks wrong (too short/long), politely ask them to check it before confirming, e.g. "Phone number eke digits 9i thiyenne. Karunakarala check karala ayeth ewanna puluwanda?" / "That number looks a digit short — could you check it?"
 - Keep the flow short. Ask for each detail ONCE and remember answers from earlier messages. Once the customer picked a time (e.g. tapped "10:30 AM"), that time is chosen: ask only for what is still missing (name and phone, together in one message). Never ask for the time again and don't call ${orders ? "order_days" : "find_free_times"} again unless they change the day or service.
 - BUTTONS: whenever the customer should pick from a few short answers, end your message with ONE line exactly like
   [[buttons: Option 1 | Option 2 | Option 3]]
@@ -163,7 +166,7 @@ export function tools(b: Biz): Anthropic.Tool[] {
   return list;
 }
 
-type Run = { b: Biz; chatId: string; ctx: Awaited<ReturnType<typeof loadContext>>; meta: Meta; customer: { name?: string; phone?: string }; pickedTime?: boolean };
+type Run = { b: Biz; chatId: string; ctx: Awaited<ReturnType<typeof loadContext>>; meta: Meta; customer: { name?: string; phone?: string }; pickedTime?: boolean; pastTime?: boolean };
 
 async function runTool(r: Run, name: string, input: Record<string, string>): Promise<unknown> {
   const { b, ctx } = r;
@@ -179,7 +182,7 @@ async function runTool(r: Run, name: string, input: Record<string, string>): Pro
       const nowHM = input.date === todayIn(b.timezone) ? new Intl.DateTimeFormat("en-GB", { timeZone: b.timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()) : "00:00";
       const upcoming = free.filter((t) => t > nowHM);
       // the customer just picked a time → this is only a re-check, don't show the time buttons again
-      if (!r.pickedTime) r.meta.chips = upcoming.slice(0, 48).map(to12); // every free time, not just the first few
+      if (!r.pastTime) r.meta.chips = upcoming.slice(0, 48).map(to12); // every free time, not just the first few
       return { date: input.date, day: pretty(input.date), service: s.name, free_times: upcoming.map((t) => `${t} (${to12(t)})`), none_free: upcoming.length === 0 };
     }
     if (name === "book_appointment") {
@@ -264,7 +267,9 @@ export async function respond(b: Biz, chatId: string, history: { role: "user" | 
   const ctx = await loadContext(b);
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY?.trim() });
   const lastUser = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
-  const run: Run = { b, chatId, ctx, meta: {}, customer: {}, pickedTime: /^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(lastUser) };
+  const run: Run = { b, chatId, ctx, meta: {}, customer: {}, pickedTime: /^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(lastUser),
+    // the latest message is a time, a phone number or a yes/confirm → the customer is past picking a time
+    pastTime: /^\s*\d{1,2}[:.]\d{2}\s*(am|pm)?\s*$/i.test(lastUser) || /\d[\d\s-]{7,}\d/.test(lastUser) || /\b(confirm|yes)\b/i.test(lastUser) };
   const messages: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
   const system = systemPrompt(b, ctx);
   const toolList = tools(b);
@@ -286,9 +291,11 @@ export async function respond(b: Biz, chatId: string, history: { role: "user" | 
   if (btn) {
     text = text.slice(0, btn.index).trim();
     const opts = btn[1].split("|").map((x) => x.trim().slice(0, 40)).filter(Boolean).slice(0, 4);
-    // free-time buttons from the tool win over anything the model adds
-    if (opts.length && !run.meta.booking && !run.meta.order && !run.meta.chips?.length) run.meta.chips = opts;
+    // Free-time buttons from the tool win only while the customer is still choosing a time;
+    // once they gave a time / their details, the model's buttons (e.g. Yes/No) are the right ones.
+    if (opts.length && !run.meta.booking && !run.meta.order && (!run.meta.chips?.length || run.pastTime)) run.meta.chips = opts;
   }
+  else if (run.pastTime) run.meta.chips = undefined; // a re-check while confirming must not bring the time list back
   text = text.replace(/\[\[[^\]]*\]\]/g, "").trim();
   return { text: text || "…", meta: run.meta, customer: run.customer };
 }
