@@ -126,7 +126,7 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
             ))}
             {busy && <div className="flex"><div className="bg-card border border-line rounded-2xl rounded-tl-md px-4 py-3 flex gap-1">{[0, 1, 2].map((i) => <span key={i} className="size-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: `${i * .15}s` }} />)}</div></div>}
             {!busy && lastChips && lastChips.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
+              <div className="flex flex-wrap gap-1.5 pt-1 max-h-44 overflow-y-auto overscroll-contain">
                 {lastChips.map((c) => <button key={c} type="button" onClick={() => send(c)} className="h-8 px-3 rounded-full border-[1.5px] border-brand text-brand text-xs font-bold hover:bg-brand hover:text-white transition">{c}</button>)}
               </div>
             )}
