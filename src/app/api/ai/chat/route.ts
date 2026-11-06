@@ -47,15 +47,17 @@ export async function POST(req: Request) {
     chat = data;
   }
   if (!chat) {
-    const { data: used } = await db.rpc("ai_month_chats", { p_business: b.id });
+    const { data: used, error: uErr } = await db.rpc("ai_month_chats", { p_business: b.id });
+    if (uErr) { console.error("ai_month_chats", uErr); return out({ error: "server", reason: `db-count-${uErr.code ?? "x"}` }, 500); }
     if (Number(used ?? 0) >= (b.ai_limit ?? 500)) return out({ error: "limit" }, 429);
     const { data, error } = await db.from("ai_chats").insert({ business_id: b.id }).select("id, token, message_count").single();
-    if (error || !data) return out({ error: "server" }, 500);
+    if (error || !data) { console.error("ai_chats insert", error); return out({ error: "server", reason: `db-chat-${error?.code ?? "x"}` }, 500); }
     chat = data;
   }
   if (chat.message_count >= MAX_MESSAGES) return out({ error: "long", token: chat.token }, 429);
 
-  await db.from("ai_messages").insert({ chat_id: chat.id, role: "user", content: p.data.message });
+  const { error: mErr } = await db.from("ai_messages").insert({ chat_id: chat.id, role: "user", content: p.data.message });
+  if (mErr) { console.error("ai_messages insert", mErr); return out({ error: "server", reason: `db-msg-${mErr.code ?? "x"}`, token: chat.token }, 500); }
   const { data: hist } = await db.from("ai_messages").select("role, content").eq("chat_id", chat.id).order("created_at", { ascending: false }).limit(24);
   // owner replies are shown to the model as the assistant speaking for the shop
   const history = ((hist ?? []) as { role: string; content: string }[]).reverse()

@@ -64,7 +64,7 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
     setBusy(true);
     try {
       const r = await fetch("/api/ai/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, token, message }) });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({ error: "server", reason: `http-${r.status}` }));
       if (j.token) { setToken(j.token); save(slug, j.token); }
       if (j.message) setMsgs((x) => [...x, j.message]);
       else setErr(j.error === "limit" ? (si ? "Assistant එක මේ මාසේ busy. Booking page එකෙන් book කරන්න." : "The assistant is busy this month — please book on the page.") : j.error === "long" ? (si ? "Chat එක දිග වැඩියි. Page එකෙන් book කරන්න." : "This chat is too long — please book on the page.") : (si ? "Reply එක ආවේ නෑ. ආයෙ try කරන්න." : "No reply — please try again.") + (j.reason ? ` (${j.reason})` : ""));

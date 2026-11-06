@@ -206,6 +206,7 @@ export function aiErrorReason(e: unknown): string {
   if (st === 404 || /model/i.test(msg) && st === 400) return "model"; // AI_MODEL name is wrong
   if (st === 429) return "rate";
   if (st === 529 || (st ?? 0) >= 500) return "busy";
+  if (st === 400) { const m = msg.match(/"message":"([^"]{0,80})/)?.[1] ?? msg.slice(0, 80); return `api-400: ${m}`; }
   if (st) return `api-${st}`;
   return "server";
 }
@@ -231,7 +232,7 @@ export async function respond(b: Biz, chatId: string, history: { role: "user" | 
   const toolList = tools(b);
   let text = "";
   for (let i = 0; i < MAX_TURNS; i++) {
-    const res = await client.messages.create({ model: AI_MODEL(), max_tokens: 700, system, tools: toolList, messages });
+    const res = await client.messages.create({ model: AI_MODEL(), max_tokens: 1024, thinking: { type: "disabled" }, system, tools: toolList, messages });
     text = res.content.filter((c): c is Anthropic.TextBlock => c.type === "text").map((c) => c.text).join("\n").trim();
     if (res.stop_reason !== "tool_use") break;
     messages.push({ role: "assistant", content: res.content });
