@@ -9,7 +9,7 @@ import { effectivePlan } from "./plan";
 import { book, getSlots } from "@/app/[slug]/actions";
 import { getOrderDays, placeOrder } from "@/app/[slug]/orders-actions";
 
-export const AI_MODEL = () => process.env.AI_MODEL || "claude-sonnet-5-5";
+export const AI_MODEL = () => process.env.AI_MODEL?.trim() || "claude-haiku-5-5";
 export const aiConfigured = () => !!process.env.ANTHROPIC_API_KEY;
 const MAX_TURNS = 6;
 
@@ -197,10 +197,34 @@ async function runTool(r: Run, name: string, input: Record<string, string>): Pro
   return { error: "unknown tool" };
 }
 
+/** Short, non-secret reason code for a failed AI call (shown as a small code and in /admin). */
+export function aiErrorReason(e: unknown): string {
+  const st = (e as { status?: number })?.status;
+  const msg = String((e as { message?: string })?.message ?? "");
+  if (st === 401 || st === 403) return "key";            // wrong / disabled API key
+  if (/credit balance/i.test(msg)) return "credits";      // no prepaid credits on the account
+  if (st === 404 || /model/i.test(msg) && st === 400) return "model"; // AI_MODEL name is wrong
+  if (st === 429) return "rate";
+  if (st === 529 || (st ?? 0) >= 500) return "busy";
+  if (st) return `api-${st}`;
+  return "server";
+}
+
+/** Tiny test call for /admin: is the key, credit and model all OK? */
+export async function aiPing(): Promise<{ ok: boolean; reason?: string; model: string }> {
+  const model = AI_MODEL();
+  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, reason: "no-key", model };
+  try {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY.trim() });
+    await client.messages.create({ model, max_tokens: 5, messages: [{ role: "user", content: "hi" }] });
+    return { ok: true, model };
+  } catch (e) { console.error("ai ping", e); return { ok: false, reason: aiErrorReason(e), model }; }
+}
+
 /** One customer message → the assistant's reply (with tool calls in between). */
 export async function respond(b: Biz, chatId: string, history: { role: "user" | "assistant"; content: string }[]) {
   const ctx = await loadContext(b);
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY?.trim() });
   const run: Run = { b, chatId, ctx, meta: {}, customer: {} };
   const messages: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
   const system = systemPrompt(b, ctx);

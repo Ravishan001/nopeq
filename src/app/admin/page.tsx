@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/admin";
 import { formatMoney } from "@/lib/countries";
 import { FREE_LIMIT, effectivePlan, fmtDate } from "@/lib/plan";
 import { getKind } from "@/lib/templates";
+import { aiPing } from "@/lib/ai";
 import { approvePayment, rejectPayment, saveBank, setPlan } from "./actions";
 
 export const metadata = { title: "Admin", robots: { index: false } };
@@ -17,9 +18,11 @@ const ago = (iso: string) => {
   return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
 };
 
-export default async function Admin({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function Admin({ searchParams }: { searchParams: Promise<{ tab?: string; aicheck?: string }> }) {
   const { db } = await requireAdmin();
-  const tab = (await searchParams).tab ?? "payments";
+  const sp = await searchParams;
+  const tab = sp.tab ?? "payments";
+  const ai = sp.aicheck ? await aiPing() : null;
 
   const [reqs, bizs, bank] = await Promise.all([
     db.from("payment_requests").select("*").order("created_at", { ascending: false }).limit(100),
@@ -76,8 +79,14 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display font-bold text-2xl">NopeQ <span className="text-brand">Admin</span></h1>
+          <Link href="/admin?aicheck=1" prefetch={false} className="btn btn-ghost h-9 px-3 text-sm">🤖 Check AI</Link>
           <span className="text-sm text-muted">{new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Colombo" })}</span>
         </div>
+        {ai && (
+          <div className={`mt-4 card p-4 text-sm ${ai.ok ? "border-green-500/50" : "border-red-500/50"}`}>
+            {ai.ok ? <>✅ AI works — model <b>{ai.model}</b>, key and credits OK.</> : <>❌ AI failed (<b>{ai.reason}</b>, model {ai.model}): {({"no-key": "ANTHROPIC_API_KEY is not set in Vercel (or you did not redeploy after adding it).","key": "The API key is wrong or disabled — create a new key and paste it again in Vercel, then redeploy.","credits": "No credits on the Anthropic account — Billing → Buy credits ($5).","model": "AI_MODEL name is wrong — set it to claude-haiku-5-5 and redeploy.","rate": "Too many requests right now — wait a minute.","busy": "Anthropic is busy — try again in a minute."} as Record<string, string>)[ai.reason ?? ""] ?? "Check Vercel → Logs for “ai ping”."}</>}
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           {[[String(businesses.length), "Businesses"], [String(pro.length), "On Pro"], [String(pending.length), "Waiting for activation"], [formatMoney(revenue, "LKR"), "Approved this month"]].map(([v, l]) => (
             <div key={l} className="card p-4"><div className="font-display font-bold text-2xl">{v}</div><div className="text-xs text-muted font-semibold">{l}</div></div>

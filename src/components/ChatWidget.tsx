@@ -35,7 +35,25 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
     const id = setInterval(() => load(token), 12000);
     return () => clearInterval(id);
   }, [open, token, load]);
-  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy, open]);
+  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, busy, open]);
+
+  // Phones: fit the chat to the part of the screen the keyboard leaves free, and stop the
+  // page behind it from scrolling, so the box and the send button don't jump around.
+  const [vp, setVp] = useState<{ h: number; top: number } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const vv = window.visualViewport;
+    const mobile = () => window.innerWidth < 640;
+    const fit = () => setVp(mobile() && vv ? { h: Math.round(vv.height), top: Math.round(vv.offsetTop) } : null);
+    fit();
+    vv?.addEventListener("resize", fit); vv?.addEventListener("scroll", fit); window.addEventListener("resize", fit);
+    const { overflow } = document.body.style, html = document.documentElement.style.overflow;
+    if (mobile()) { document.body.style.overflow = "hidden"; document.documentElement.style.overflow = "hidden"; }
+    return () => {
+      vv?.removeEventListener("resize", fit); vv?.removeEventListener("scroll", fit); window.removeEventListener("resize", fit);
+      document.body.style.overflow = overflow; document.documentElement.style.overflow = html;
+    };
+  }, [open]);
 
   async function send(m: string) {
     const message = m.trim();
@@ -49,7 +67,7 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
       const j = await r.json();
       if (j.token) { setToken(j.token); save(slug, j.token); }
       if (j.message) setMsgs((x) => [...x, j.message]);
-      else setErr(j.error === "limit" ? (si ? "Assistant එක මේ මාසේ busy. Booking page එකෙන් book කරන්න." : "The assistant is busy this month — please book on the page.") : j.error === "long" ? (si ? "Chat එක දිග වැඩියි. Page එකෙන් book කරන්න." : "This chat is too long — please book on the page.") : (si ? "Reply එක ආවේ නෑ. ආයෙ try කරන්න." : "No reply — please try again."));
+      else setErr(j.error === "limit" ? (si ? "Assistant එක මේ මාසේ busy. Booking page එකෙන් book කරන්න." : "The assistant is busy this month — please book on the page.") : j.error === "long" ? (si ? "Chat එක දිග වැඩියි. Page එකෙන් book කරන්න." : "This chat is too long — please book on the page.") : (si ? "Reply එක ආවේ නෑ. ආයෙ try කරන්න." : "No reply — please try again.") + (j.reason ? ` (${j.reason})` : ""));
     } catch {
       setErr(si ? "Internet එක බලලා ආයෙ try කරන්න." : "Check your connection and try again.");
     }
@@ -67,13 +85,13 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
         </button>
       )}
       {open && (
-        <div className="fixed z-50 inset-0 sm:inset-auto sm:right-6 sm:bottom-6 sm:w-[400px] sm:h-[640px] sm:max-h-[85dvh] flex flex-col bg-[var(--bg)] sm:rounded-3xl sm:border sm:border-line shadow-2xl overflow-hidden" role="dialog" aria-label="Chat">
+        <div className="fixed z-50 inset-0 sm:inset-auto sm:right-6 sm:bottom-6 sm:w-[400px] sm:h-[640px] sm:max-h-[85dvh] flex flex-col bg-[var(--bg)] sm:rounded-3xl sm:border sm:border-line shadow-2xl overflow-hidden overscroll-contain" style={vp ? { top: vp.top, height: vp.h, bottom: "auto" } : undefined} role="dialog" aria-label="Chat">
           <div className="flex items-center gap-3 p-3.5 border-b border-line bg-card">
             <span className="size-10 rounded-full overflow-hidden bg-soft flex items-center justify-center text-xl shrink-0">{logo ? <img src={logo} alt="" className="size-full object-cover" /> : icon}</span>
             <div className="min-w-0 flex-1"><div className="font-display font-bold truncate">{name}</div><div className="text-xs text-green-600 dark:text-green-400 font-semibold">● {si ? "AI assistant · ඉක්මනින් reply කරනවා" : "AI assistant · replies instantly"}</div></div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="size-9 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-lg">✕</button>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2">
             {shown.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className="max-w-[85%] space-y-1.5">
@@ -103,11 +121,11 @@ export function ChatWidget({ slug, name, icon, logo, si, autoOpen }: { slug: str
             {err && <div className="text-xs text-red-500 px-1">{err}</div>}
             <div ref={end} />
           </div>
-          <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="flex gap-2 p-3 border-t border-line bg-card" style={{ paddingBottom: "max(.75rem, env(safe-area-inset-bottom))" }}>
-            <input value={text} onChange={(e) => setText(e.target.value)} maxLength={600} placeholder={si ? "Message එකක් ලියන්න…" : "Type a message…"} className="flex-1 h-11 px-4 rounded-full bg-[var(--bg)] border border-line outline-none focus:border-brand text-sm" />
-            <button disabled={busy || !text.trim()} className="size-11 rounded-full bg-brand text-white font-bold disabled:opacity-40" aria-label="Send">➤</button>
+          <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="shrink-0 flex items-center gap-2 p-3 border-t border-line bg-card" style={{ paddingBottom: "max(.75rem, env(safe-area-inset-bottom))" }}>
+            <input value={text} onChange={(e) => setText(e.target.value)} maxLength={600} placeholder={si ? "Message එකක් ලියන්න…" : "Type a message…"} className="flex-1 h-11 px-4 rounded-full bg-[var(--bg)] border border-line outline-none focus:border-brand text-base sm:text-sm" />
+            <button disabled={busy || !text.trim()} className="shrink-0 size-11 rounded-full bg-brand text-white font-bold disabled:opacity-40" aria-label="Send">➤</button>
           </form>
-          <div className="text-[10px] text-muted text-center pb-1.5 bg-card">{si ? "AI එකට වැරදෙන්න පුළුවන් · වැදගත් දේවල් shop එකෙන් confirm කරගන්න" : "AI can make mistakes · confirm important details with the shop"}</div>
+          <div className="shrink-0 text-[10px] text-muted text-center pb-1.5 bg-card">{si ? "AI එකට වැරදෙන්න පුළුවන් · වැදගත් දේවල් shop එකෙන් confirm කරගන්න" : "AI can make mistakes · confirm important details with the shop"}</div>
         </div>
       )}
     </>

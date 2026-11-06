@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
-import { aiOn, respond, type Biz, type Meta } from "@/lib/ai";
+import { aiErrorReason, aiOn, respond, type Biz, type Meta } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -72,8 +72,9 @@ export async function POST(req: Request) {
   try {
     reply = await respond(b, chat.id, history);
   } catch (e) {
-    console.error("ai respond", e);
-    return out({ error: "ai", token: chat.token }, 502);
+    const reason = aiErrorReason(e);
+    console.error("ai respond", reason, e);
+    return out({ error: "ai", reason, token: chat.token }, 502);
   }
   const meta: Meta = reply.meta;
   await db.from("ai_messages").insert({ chat_id: chat.id, role: "assistant", content: reply.text.slice(0, 4000), meta: Object.keys(meta).length ? meta : null });
